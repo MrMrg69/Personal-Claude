@@ -1,0 +1,24 @@
+# Dependências e builds (todos os projetos)
+**/node_modules/
+**/dist/
+**/dist-ssr/
+**/.vite/
+**/coverage/
+
+# Artefatos de teste
+**/test-results/
+**/playwright-report/
+**/e2e/__screenshots__/
+
+# Sistema / editores
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.local
+.env
+.env.*
+!.env.example
