@@ -1,0 +1,10 @@
+# Dependências e build
+node_modules/
+dist/
+
+# Artefatos do smoke test (screenshot/json); mantém só o .gitkeep
+e2e/artifacts/*
+!e2e/artifacts/.gitkeep
+
+# Arquivos locais (ex.: .env.local)
+*.local

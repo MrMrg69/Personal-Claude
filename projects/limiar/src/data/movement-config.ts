@@ -1,0 +1,45 @@
+import type { MovementConfig } from '@/core/physics/movement-config';
+
+/**
+ * Física do movimento (design §5.1). Objeto MUTÁVEL: HMR e o painel de tuning
+ * alteram os campos in-place; sistemas leem `cfg.movement.x` no momento do uso.
+ */
+export const MOVEMENT: MovementConfig = {
+  capsuleRadius: 0.4,
+  capsuleHeight: 1.8,
+  eyeHeight: 1.62,
+  walkSpeed: 6.0,
+  sprintSpeed: 8.5,
+  groundAccel: 60,
+  groundDecel: 80,
+  airAccel: 12,
+  airMaxSpeed: 6.0,
+  gravity: -24,
+  jumpHeight: 1.4,
+  jumpHoldGravityScale: 0.5,
+  jumpHoldMaxTime: 0.25,
+  maxFallSpeed: -40,
+  coyoteTime: 0.1,
+  jumpBufferTime: 0.1,
+  slopeLimitDeg: 46,
+  stepHeight: 0.35,
+  groundSnapDistance: 0.2,
+};
+
+/** Limiares derivados do movimento (locomotion-state, kill-plane). */
+export const LOCOMOTION = {
+  /** m/s; abaixo disto no chão o estado é 'idle'. */
+  idleSpeed: 0.1,
+} as const;
+
+export const RESPAWN = {
+  /** s de chão caminhável contínuo entre amostras de lastSafePosition (kill plane). */
+  safeGroundedSeconds: 1,
+} as const;
+
+// HMR: nunca troque a referência — copie os campos novos sobre o objeto vivo.
+if (import.meta.hot) {
+  import.meta.hot.accept((mod) => {
+    if (mod) Object.assign(MOVEMENT, mod.MOVEMENT);
+  });
+}

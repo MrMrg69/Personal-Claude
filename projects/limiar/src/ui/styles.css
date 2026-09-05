@@ -1,0 +1,183 @@
+/*
+ * LIMIAR — estilos do esqueleto (design §1, §8). Identidade: crepúsculo
+ * permanente — névoa lilás-acinzentada de fundo, ciano-vigia nos destaques.
+ * O HUD é 100 % DOM (0 draw calls). O canvas ocupa a tela toda em CSS; o
+ * buffer interno é redimensionado pelo Renderer (render scale).
+ */
+:root {
+  --fog: #8d7f9c;
+  --fog-deep: #5f5470;
+  --fog-dark: #2f2937;
+  --ochre: #a67c52;
+  --cyan: #3fd2c7;
+  --magenta: #c83aa0;
+  --bone: #d9cdb5;
+  --ink: #1c1820;
+  --font-ui: 'Segoe UI', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--fog);
+  color: var(--bone);
+  font-family: var(--font-ui);
+}
+
+#app {
+  position: relative;
+}
+
+#game {
+  display: block;
+  width: 100%;
+  height: 100%;
+  outline: none;
+  cursor: crosshair;
+}
+
+/* Camada de UI: não captura o mouse por padrão; cada filho decide. */
+#ui {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* ---- Overlay (clique para jogar / pausado / erros) ---- */
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
+  background:
+    radial-gradient(ellipse at 50% 70%, rgba(166, 124, 82, 0.28), transparent 60%),
+    linear-gradient(180deg, rgba(47, 41, 55, 0.78) 0%, rgba(95, 84, 112, 0.72) 55%, rgba(141, 127, 156, 0.6) 100%);
+  backdrop-filter: blur(2px);
+}
+
+.overlay[hidden] {
+  display: none;
+}
+
+.overlay--error {
+  cursor: default;
+}
+
+.overlay__card {
+  max-width: 34rem;
+  padding: 2rem 2.5rem;
+  border: 1px solid rgba(63, 210, 199, 0.35);
+  border-radius: 4px;
+  background: rgba(28, 24, 32, 0.62);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25), 0 24px 60px rgba(0, 0, 0, 0.35);
+  text-align: center;
+}
+
+.overlay__title {
+  margin: 0 0 0.25rem;
+  font-size: 3rem;
+  font-weight: 300;
+  letter-spacing: 0.55em;
+  padding-left: 0.55em; /* compensa o letter-spacing final para centrar */
+  color: var(--cyan);
+  text-shadow: 0 0 18px rgba(63, 210, 199, 0.45);
+}
+
+.overlay__tagline {
+  margin: 0 0 1.5rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(217, 205, 181, 0.7);
+}
+
+.overlay__status {
+  margin: 0 0 1rem;
+  font-size: 1.25rem;
+  color: var(--bone);
+}
+
+.overlay__status--error {
+  color: var(--magenta);
+}
+
+.overlay__hint {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.7;
+  color: rgba(217, 205, 181, 0.85);
+}
+
+.overlay__hint kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 0 0.4em;
+  border: 1px solid rgba(63, 210, 199, 0.5);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  color: var(--cyan);
+}
+
+.overlay__note {
+  margin: 1rem 0 0;
+  font-size: 0.75rem;
+  color: rgba(217, 205, 181, 0.55);
+}
+
+/* ---- HUD de debug (F3) ---- */
+.debug-hud {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  margin: 0;
+  padding: 6px 8px;
+  font: 12px/1.45 var(--font-mono);
+  color: #e8e2d6;
+  background: rgba(0, 0, 0, 0.55);
+  border-left: 2px solid var(--cyan);
+  white-space: pre;
+  pointer-events: none;
+}
+
+.debug-hud[hidden] {
+  display: none;
+}
+
+/* ---- Painel de tuning (F4, lil-gui) ---- */
+.tuning-panel {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  max-height: calc(100% - 16px);
+  overflow: auto;
+  pointer-events: auto;
+}
+
+.tuning-panel[hidden] {
+  display: none;
+}
+
+.tuning-panel .lil-gui {
+  --background-color: rgba(28, 24, 32, 0.92);
+  --title-background-color: rgba(47, 41, 55, 0.95);
+  --focus-color: var(--cyan);
+  --number-color: var(--cyan);
+  --string-color: var(--ochre);
+  --font-family: var(--font-mono);
+}
