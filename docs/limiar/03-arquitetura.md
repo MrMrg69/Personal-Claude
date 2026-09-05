@@ -366,7 +366,7 @@ Os offsets são **recalculados do zero a cada frame**; cada contribuição decai
 |---|---|---|
 | Kick de pouso | `player:landed { fallSpeed }` → `amp = clamp(fallSpeed / 20, 0, 1)`; molas `landPitch`, `landY` recebem `kickToPeak(−amp · x)` (impulso calibrado para o pico anunciado) | `pitchDeg 2.5`, `posY 0.06`, `zeta 0.6`, `omega 22` |
 | Slot de recoil | `camera:kick { pitchDeg, yawDeg, posBack }` desloca `recoilOffsetPitch/Yaw` (alvo das molas); `recoveryDegPerSec` traz o alvo a zero; `recoilBack.kickToPeak(posBack)` | `zeta 0.55`, `omega 26`, `recoveryDegPerSec 18`, F9: `{ 1.2°, ±0.3°, 0.02 m }` |
-| Head-bob | amplitude escala com `speed/walkSpeed`, zero no ar, `damp` de 10 | **desligado** por padrão (`enabled: false`), `ampY 0.018`, `ampX 0.01`, `rollDeg 0.25`, `hz 1.9` |
+| Head-bob | amplitude escala com `speed/walkSpeed`, zero no ar, `damp` com `ampDampLambda` (10) | **desligado** por padrão (`enabled: false`), `ampY 0.018`, `ampX 0.01`, `rollDeg 0.25`, `hz 1.9` |
 
 `Spring.step(dt)` aplica a solução fechada do oscilador amortecido (sub/crítico/super-amortecido): não diverge com dt grande (um frame de 0,1 s com ω = 26 explodia para NaN no Euler semi-implícito original) e o pico do kick não depende do frame rate (com Euler a 60 Hz o pico saía ~40 % menor que a 144 Hz). `kickToPeak(peak)` calibra o impulso pelo `peakFactor(ζ)` — a resposta ao impulso `kick(peak · ω)` atinge só ≈ 0,50 · peak em ζ = 0,6. Testes em `tests/core/spring.test.ts`.
 
@@ -738,7 +738,7 @@ Lista de verificação do e2e (todas verdes na entrega):
 - [x] virou 90° ± 5° por injeção de mouse e andou ≥ 1,5 m para −X
 - [x] pulou e voltou a `grounded`
 - [x] `drawCalls ≤ 30` (medido: 4) e `fps > 5`
-- [x] screenshots em `e2e/artifacts/smoke*.png` + `smoke.json`
+- [x] screenshots em `e2e/artifacts/smoke*.png` + `smoke.json` — gerados por `npm run test:e2e`, **não versionados** (só o `.gitkeep`); a cópia versionada de `smoke-walk.png` é `docs/limiar/img/m0-campo-de-provas.png`, exibida no [README das docs](./README.md#estado-atual-m0--esqueleto)
 
 Regras de qualidade mantidas no código: zero `any`; zero alocação por passo/frame nos hot paths (scratch `Vector3`/`Capsule` por módulo, parâmetros `out`; `snapshot()`, `queue()` e `debugHelper()` alocam de propósito fora do hot path); números fora de `src/data` só como constantes locais nomeadas e comentadas; comentários explicam decisões não óbvias.
 
@@ -829,7 +829,7 @@ Todas registradas pelos implementadores com motivo verificado. O código é o qu
 | 23 | §8.1 | `Settings.debugHud` "ligado por padrão em DEV" | `debugHud: import.meta.env.DEV` | conforme o texto |
 | 24 | §9 e2e | andar 1 s para −Z, medir | também vira 90°, anda para −X, pula e liga o HUD; esperas por `world.time.sim`; porta livre por `net.createServer(0)` + `--strictPort` | em SwiftShader o relógio de parede não vale; porta fixa colidia |
 | 25 | §10.1 | `vite.config.ts` com `advancedChunks` | `build.rolldownOptions.output.codeSplitting.groups` + `chunkSizeWarningLimit: 700` | formato do Vite 8 (rolldown) |
-| 26 | §10.2 | `docs/limiar/{README.md, design.md, roadmap.md, performance.md}` | `README.md`, `01-visao-e-design.md`, `02-design-tecnico.md`, `03-arquitetura.md` (este), `04-roadmap.md`, `05-performance.md`, `06-guia-de-desenvolvimento.md`, `decisoes/` | numeração para leitura em ordem |
+| 26 | §10.2 | `docs/limiar/{README.md, design.md, roadmap.md, performance.md}` | `README.md`, `01-visao-e-design.md`, `02-design-tecnico.md`, `03-arquitetura.md` (este), `04-roadmap.md`, `05-performance.md`, `06-guia-de-desenvolvimento.md`, `decisoes/`, `img/m0-campo-de-provas.png` | numeração para leitura em ordem; o screenshot versionado é a prova de "parar e mostrar rodando" (os artefatos do e2e são ignorados pelo git) |
 | 27 | §3.3 | `CapsuleBody.layer/mask: CollisionLayer` | `CollisionMask` | ver #11 |
 | 28 | §3.1 | `ofKind` + type guards | igual, mais `ENTITY_KINDS` exportado | iteração sem alocar iterador de `Map` por frame |
 | 29 | §6.1/§7 | chão 'recebe sombra' (só `receiveShadow`) | as lajes do chão entram nos chunks mesclados com `castShadow = true` | separar o chão dobraria as meshes/draw calls do mundo; custo medido irrelevante (12 triângulos por laje; 8 draw calls com sombras) |
@@ -841,7 +841,7 @@ Questões em aberto (não são divergências, mas convém saber):
 - Pointer lock **real** (modo `locked`, pausa por Esc, cooldown do Chromium, relock ao sair do tuning) não é testável em headless; só o caminho `unlocked` foi exercitado.
 - HMR verificado com `vite dev` + Chromium (script fora do repositório): `walkSpeed` 6 → 7 → 8 → 9 e `fogDensity` 0,01 → 0,02 → 0,03 aplicados sem reload. Não há teste automatizado permanente desse caminho; `tests/data/hot-config.test.ts` cobre só a lógica de `keepLive`.
 - `Octree.capsuleIntersect`/`rayIntersect` alocam por chamada; monitorar heap é o gatilho da ADR 0003.
-- Controle aéreo conforme §5.1 (converge a `airMaxSpeed = 6` a 12 m/s²): um sprint-jump perde momentum em ~0,2 s. É o que o design especifica; possível ponto de tuning.
+- Controle aéreo (§5.1, *air-accelerate*): um sprint-jump mantém os 8,5 m/s enquanto W estiver pressionado; strafe no ar não passa de `airMaxSpeed = 6` e só empurrar contra a velocidade freia. Se em M1+ o feel pedir perda gradual de momentum no ar, é aqui que entra (possível ponto de tuning).
 - Subir rampa reduz a velocidade horizontal (≈ 5,25 m/s na rampa de 20,6° em vez de 6): o push-out do Octree tem componente horizontal. Feel aceitável; se incomodar, projetar a velocidade no plano do chão quando `grounded`.
 - Pousar sobre uma aresta (ex.: caixote) pode deixar a cápsula "pendurada" com os pés até 5 cm abaixo do topo (`normal.y ≈ 0,87 ≥ cos 46°` → `grounded`). Comportamento clássico de cápsula; não trepida.
 - Atalhos de debug que mexem na simulação/cena (F4/F6/F9/P/T) são lidos no passo fixo e não respondem com o jogo pausado; F3/F7/F8 (`handleDisplayKeys`) funcionam também em `ready`/`paused`, porque o `frameUpdate` os lê quando o loop está pausado.

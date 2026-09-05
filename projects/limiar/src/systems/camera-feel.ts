@@ -5,8 +5,6 @@ import type { System } from './system';
 
 /** Abaixo disto a mudança de FOV não vale um updateProjectionMatrix. */
 const FOV_EPSILON_DEG = 0.01;
-/** Lambda do damp da amplitude do head-bob (liga/desliga suave ao parar/pular). */
-const BOB_AMP_LAMBDA = 10;
 
 /**
  * Frame #2 (design §4.2, §5.5): molas de kick de pouso e slot de recoil, FOV
@@ -93,7 +91,7 @@ export function createCameraFeelSystem(): System {
       const v = p.body.velocity;
       const speedRatio = Math.hypot(v.x, v.z) / world.cfg.movement.walkSpeed;
       const bobTarget = bob.enabled && p.body.grounded ? Math.min(1, speedRatio) : 0;
-      bobAmp = damp(bobAmp, bobTarget, BOB_AMP_LAMBDA, dt);
+      bobAmp = damp(bobAmp, bobTarget, bob.ampDampLambda, dt);
       if (bobAmp > 0) bobPhase += 2 * Math.PI * bob.hz * dt * Math.max(speedRatio, 1);
       const bobY = bob.ampY * Math.abs(Math.sin(bobPhase)) * bobAmp;
       const bobX = bob.ampX * Math.sin(bobPhase / 2) * bobAmp;

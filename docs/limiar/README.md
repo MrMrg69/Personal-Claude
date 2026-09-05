@@ -8,6 +8,10 @@
 
 Renderização, controlador em primeira pessoa (WASD, sprint, pulo com "hold", step-up, rampas, kick de pouso), mundo de teste ("Campo de Provas"), HUD de debug, painel de tuning com HMR de configuração, testes unitários (11 suítes, 150 testes) e smoke test e2e em Chromium headless. **Sem armas, inimigos ou loot** — os contratos e slots para eles já existem no código e estão descritos no design técnico (§11). Próximo passo: M1 — gunplay ([roadmap](04-roadmap.md)).
 
+![Campo de Provas em M0: caixotes, muretas, rampas e cilindros de faixas sob o crepúsculo, vistos em primeira pessoa após andar 1 s para −Z](img/m0-campo-de-provas.png)
+
+*Campo de Provas rodando em M0 — captura do smoke test e2e (`smoke-walk.png`, Chromium headless + SwiftShader, 1280 × 720, `?nolock=1&debug=1&shadows=0&seed=1`), copiada para `img/m0-campo-de-provas.png` porque os artefatos de `e2e/artifacts/` não são versionados. Regere com `npm run test:e2e`.*
+
 ## Índice
 
 | Doc | O que é | Leia quando |

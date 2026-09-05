@@ -104,6 +104,7 @@ function buildGui(GUI: LilGuiModule['GUI'], host: HTMLElement, world: World, hoo
   hb.add(feel.headBob, 'ampX', 0, 0.1, 0.001);
   hb.add(feel.headBob, 'rollDeg', 0, 3, 0.05);
   hb.add(feel.headBob, 'hz', 0.5, 4, 0.05);
+  hb.add(feel.headBob, 'ampDampLambda', 1, 30, 0.5);
 
   const r = gui.addFolder('render');
   const renderChanged = (path: string) => () => hooks.onRenderChanged(path);

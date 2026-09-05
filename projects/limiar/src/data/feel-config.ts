@@ -28,6 +28,8 @@ export interface FeelConfig {
     ampX: number;
     rollDeg: number;
     hz: number;
+    /** Lambda do damp da amplitude (liga/desliga suave ao parar, pular ou trocar de estado). */
+    ampDampLambda: number;
   };
 }
 
@@ -47,7 +49,7 @@ const DEFAULTS: FeelConfig = {
     recoveryDegPerSec: 18,
     debugKick: { pitchDeg: 1.2, yawDeg: 0.3, posBack: 0.02 },
   },
-  headBob: { enabled: false, ampY: 0.018, ampX: 0.01, rollDeg: 0.25, hz: 1.9 },
+  headBob: { enabled: false, ampY: 0.018, ampX: 0.01, rollDeg: 0.25, hz: 1.9, ampDampLambda: 10 },
 };
 
 /** Objeto MUTÁVEL (HMR/painel); keepLive mantém a referência entre edições. */

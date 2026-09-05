@@ -539,7 +539,7 @@ rig.root (Object3D)                   posição = pés interpolados; rotation.y 
 
 - **Kick de pouso:** em `player:landed`, `amp = clamp(fallSpeed / 20, 0, 1)`; `landKickPitch.kickToPeak(−amp · 2,5°)`, `landKickPosY.kickToPeak(−amp · 0,06 m)` (pitch negativo = olhar para baixo; o impulso é calibrado para que 2,5° / 6 cm sejam o **pico** real); molas ζ 0,6, ω 22 rad/s.
 - **Slot de recoil:** `recoilPitch`/`recoilYaw` são `Spring`s (ζ 0,55, ω 26) com uma componente `recoilOffset` que a arma (M1) desloca e o `recoveryPerSec` (18°/s) traz de volta. Em M0 o evento `camera:kick` (tecla **F9**) dispara `{ pitchDeg: 1,2, yawDeg: ±0,3, posBack: 0,02 }` para afinar a mola antes de existir arma.
-- **Head-bob:** `feel.headBob = { enabled: false, ampY: 0,018, ampX: 0,010, rollDeg: 0,25, hz: 1,9 }` — implementado (15 linhas: `y = A·|sin(2πft)|`, `x = A_x·sin(πft)`, amplitude escalada por `speed/walkSpeed`, 0 no ar, com damp) mas **desligado por padrão** (acessibilidade e escopo). Toggle no painel.
+- **Head-bob:** `feel.headBob = { enabled: false, ampY: 0,018, ampX: 0,010, rollDeg: 0,25, hz: 1,9, ampDampLambda: 10 }` — implementado (15 linhas: `y = A·|sin(2πft)|`, `x = A_x·sin(πft)`, amplitude escalada por `speed/walkSpeed`, 0 no ar, com damp) mas **desligado por padrão** (acessibilidade e escopo). Toggle no painel.
 - **Crouch/slide:** fora de M0 (M1 traz crouch; slide é pós-MVP). Não há campos deles na config em M0 — evitar config morta.
 
 ---
@@ -600,7 +600,7 @@ Triângulos ≤ 300k/frame no MVP; texturas: nenhuma. Zero alocação no hot pat
 
 ### 6.6 Plano de medição
 
-`performance.mark/measure` em `sim`, `frame`, `render`; HUD de debug (§8) com FPS/avg/max de 1 s e `renderer.info`. Alvo: **frame time p95 < 16,6 ms em Intel UHD 620, 1080p, DPR 1, sombras ligadas**. SwiftShader no CI valida **funcionamento** e draw calls, não performance (checklist manual em `docs/limiar/performance.md`).
+`performance.mark/measure` em `sim`, `frame`, `render`; HUD de debug (§8) com FPS/avg/max de 1 s e `renderer.info`. Alvo: **frame time p95 < 16,6 ms em Intel UHD 620, 1080p, DPR 1, sombras ligadas**. SwiftShader no CI valida **funcionamento** e draw calls, não performance (checklist manual em `docs/limiar/05-performance.md`).
 
 ---
 
@@ -776,6 +776,7 @@ export default defineConfig({
 | `tests/physics/integrate.test.ts` | altura de toque (≤ 4 passos segurado) 1,40 ± 0,03; toque de 133 ms < 1,7; hold ∈ [2,0, 2,4]; velocidade máx; decel para em < 0,1 s; controle aéreo não excede `airMaxSpeed`; sprint-jump preserva 8,5 m/s; S freia; coyote e jump buffer |
 | `tests/physics/collision.test.ts` | nível sintético (chão, parede, rampas 20,6°/40°/53°, degrau 0,25/0,5, corredor 1,2 m) via `level-builder` + `CollisionWorld`: grounded em rampa 40°, escorrega em 53°, sobe 0,25 e 0,35 (step-up), não sobe 0,5, não prende no corredor; `raycast` acerta chão e hitbox com `entity` |
 | `tests/data/definitions.test.ts` | `validateDefs(DEFS)` passa; ids únicos; cores hex; nível tem spawn `player`; `killPlaneY < 0` |
+| `tests/data/hot-config.test.ts` | `keepLive` mantém a referência do objeto de config entre versões (HMR) e copia os valores novos; listeners de `onConfigHotUpdate` |
 | `tests/architecture.test.ts` | regras de dependência do §3.2 |
 
 **e2e (`e2e/smoke.mjs`, ~100 linhas, sem `@playwright/test`):**
@@ -808,11 +809,11 @@ projects/limiar/
 ├── e2e/
 │   ├── smoke.mjs                   — §9
 │   └── artifacts/.gitkeep
-├── tests/                          — §9 (10 arquivos)
+├── tests/                          — §9 (11 arquivos)
 │   ├── architecture.test.ts
 │   ├── core/{loop,input,events,spring,random,storage}.test.ts
 │   ├── physics/{integrate,collision}.test.ts
-│   ├── data/definitions.test.ts
+│   ├── data/{definitions,hot-config}.test.ts
 │   └── helpers/fake-storage.ts     — localStorage em memória
 └── src/
     ├── main.ts                     — bootstrap: checa WebGL2, cria Game em #app, trata erro fatal
@@ -897,6 +898,8 @@ docs/limiar/
 ├── design.md                — este documento
 ├── roadmap.md               — §13 com checklists
 ├── performance.md           — orçamento de draw calls, checklist de medição em iGPU real, como ler o HUD
+├── img/
+│   └── m0-campo-de-provas.png — screenshot versionado do M0 (cópia do smoke-walk.png do e2e; a prova de "parar e mostrar rodando")
 └── decisoes/
     ├── 0001-sem-ecs-generico.md
     ├── 0002-fixed-timestep-60hz.md
@@ -945,7 +948,7 @@ Em todos os casos: **arquivos novos** em `data/`, `entities/`, `systems/`, `ui/`
 | Vite 8 / Vitest 5 / TS 5.9 recentes | baixa / médio | Versões exatas + lock; `npm run check` como gate; `vite 7.x` compatível com o mesmo código se o rolldown der problema. |
 | `three` r185 addons mudarem sem aviso em upgrade | baixa / médio | Pin exato; `Capsule`, `Octree`, `BufferGeometryUtils`, `lil-gui` isolados em `world/` e `ui/`; upgrade só com `check` verde. |
 | Crescimento do bundle (áudio, GLTF, bvh) | média / baixo | Orçamento: `three` (~150–170 KB gz tree-shaken) + jogo < 250 KB gz no MVP; `vite build` imprime tamanhos; nova dependência exige justificar KB. |
-| SwiftShader não mede performance | certa / baixo | e2e valida funcionamento e draw calls; performance real medida manualmente (`docs/limiar/performance.md`). |
+| SwiftShader não mede performance | certa / baixo | e2e valida funcionamento e draw calls; performance real medida manualmente (`docs/limiar/05-performance.md`). |
 | Tentação de "fazer o ECS logo" com 5 tipos de entidade | média / médio | ADR 0001; `EntityStore.ofKind` + type guards cobrem o roadmap; revisitar só com > 2 000 entidades ativas. |
 | `exactOptionalPropertyTypes` + campos opcionais | baixa / baixo | Nunca atribuir `undefined`; usar type guards em `entities/index.ts`. |
 
@@ -966,7 +969,7 @@ Em todos os casos: **arquivos novos** em `data/`, `entities/`, `systems/`, `ui/`
 - [x] 11 suítes vitest verdes (150 testes); `e2e/smoke.mjs` verde em SwiftShader; `npm run check` verde
 - [x] `docs/limiar/`: README, design.md, roadmap.md, performance.md, decisoes/0001–0007 (entregues como `README.md`, `01-visao-e-design.md`, `02-design-tecnico.md`, `03-arquitetura.md`, `04-roadmap.md`, `05-performance.md`, `06-guia-de-desenvolvimento.md`, `decisoes/0001–0007`)
 - [ ] **Critério de pronto** (parcial — cumprido: e2e verde; 8 draw calls com sombras; HMR de `walkSpeed` verificado manualmente; pendente: iGPU real, sessão manual de 5 min, heap plano — detalhes no [roadmap §3.7](./04-roadmap.md)): e2e verde; ≤ 16 draw calls com sombras no HUD; 60 fps estáveis com sombras numa iGPU real (ou registrado em `performance.md` que não havia iGPU disponível e o número em SwiftShader); 5 minutos andando/pulando no mundo de teste sem prender em geometria, sem quicar em rampa e subindo o degrau de 0,25 m e 0,35 m; heap plano por 5 min; HMR de `movement-config.ts` altera `walkSpeed` sem recarregar a página.
-- [x] Parar e mostrar rodando (screenshots em `e2e/artifacts/smoke*.png`).
+- [x] Parar e mostrar rodando — screenshot versionado em `docs/limiar/img/m0-campo-de-provas.png` (exibido no `docs/limiar/README.md`); os `e2e/artifacts/smoke*.png` são gerados por `npm run test:e2e` e não são versionados.
 
 ### M1 — Gunplay (pilar nº 1)
 

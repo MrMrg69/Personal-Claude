@@ -135,7 +135,7 @@ Ordem obrigatória: M0 → M1 → M2 → M3 → M4 → M5. Cada milestone depend
 - [ ] 5 minutos andando e pulando no Campo de Provas sem prender em geometria, sem quicar em rampa, subindo os degraus de 0,25 m e 0,35 m — coberto por testes unitários; a sessão manual de 5 min ainda não foi feita
 - [ ] Heap plano por 5 minutos (zero alocação por frame nos hot paths) — só mensurável no painel Memory de um navegador real; checklist em `05-performance.md` §6.4
 - [x] HMR de `src/data/movement-config.ts` altera `walkSpeed` sem recarregar a página — verificado manualmente com `vite dev` + Chromium (`walkSpeed` 6 → 7 → 8 → 9 sem reload; registrado em `03-arquitetura.md` §15.1/§19 e no comentário de `src/data/hot-config.ts`); a lógica de `keepLive` é coberta por `tests/data/hot-config.test.ts`. Sem automação permanente desse caminho
-- [x] **Parar e mostrar rodando** (Seção 5 do master prompt) — screenshots em `e2e/artifacts/smoke-ready.png`, `smoke-walk.png`, `smoke-hud.png`
+- [x] **Parar e mostrar rodando** (Seção 5 do master prompt) — screenshot versionado em [`docs/limiar/img/m0-campo-de-provas.png`](img/m0-campo-de-provas.png) (cópia do `smoke-walk.png` do e2e, exibido no [README](README.md#estado-atual-m0--esqueleto)); os demais screenshots (`smoke-ready.png`, `smoke-walk.png`, `smoke-hud.png`) são gerados por `npm run test:e2e` em `e2e/artifacts/` e **não são versionados**
 
 ### 3.8 O que NÃO entra em M0
 
