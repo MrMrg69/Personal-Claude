@@ -54,5 +54,3 @@ export const PALETTE = {
   propBone: 0xd9cdb5,
   propInk: 0x2f2a33,
 } as const;
-
-export type PaletteKey = keyof typeof PALETTE;

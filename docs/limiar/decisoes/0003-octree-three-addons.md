@@ -19,7 +19,7 @@ O mundo de teste tem rampas (20,6°, 40°, 53°), degraus, corredor de 1,2 m e q
 
 - Colisão do mundo estático por `Octree.fromGraphNode(root)` (`CollisionWorld.rebuildStatic`, build único no carregamento) + `capsuleIntersect` e `rayIntersect` de `three/addons/math/Octree.js`, com `Capsule` de `three/addons/math/Capsule.js`.
 - A resolução (`resolveCapsuleCollision` em `src/core/physics/collision-resolve.ts`) é **pura sobre a interface `CollisionQuery`** (`src/core/physics/collision-query.ts`): `capsuleIntersect(c, out)` e `raycast(origin, dir, maxDist, mask, out)`. `CollisionWorld` implementa essa interface sobre o Octree e sobre hitboxes analíticas (`addHitbox`/`removeHitbox`, cápsula por referência). Assim o core é testável com um mundo sintético e a implementação pode ser trocada sem tocar na física.
-- Algoritmo por passo: até 5 iterações de push-out com folga de 1 mm; contato com `normal.y ≥ cos 46°` é chão, o resto desliza; **step-up explícito** (0,35 m, só quando estava no chão) e **snap ao chão** (0,20 m) ao descer rampas. Sem "rampa lenta": abaixo do limite é chão, acima é parede.
+- Algoritmo por passo: até 5 iterações de push-out com folga de 1 mm; contato com `normal.y ≥ cos 46°` é chão, o resto desliza; **step-up explícito** (0,35 m, só quando estava no chão) e **snap ao chão** (0,40 m, esfera tangente ao plano) ao descer rampas e degraus. Sem "rampa lenta": abaixo do limite é chão, acima é parede.
 - `CollisionLayer` (`World`, `Player`, `Enemy`, `Projectile`, `Pickup`) como bitmask, e `RayHit.entity` identifica a hitbox atingida — hitscan de M1 já distingue mundo de inimigo.
 - Custo esperado: Octree de poucos milhares de triângulos, ≤ 5 `capsuleIntersect` + 1–2 raycasts → < 0,1 ms por passo.
 

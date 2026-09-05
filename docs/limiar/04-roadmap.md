@@ -48,7 +48,7 @@ Ordem obrigatória: M0 → M1 → M2 → M3 → M4 → M5. Cada milestone depend
 
 **Dependências.** Nenhuma. Ambiente: Node ≥ 22.12, npm, Chromium headless para o e2e (opcional: `e2e/smoke.mjs` pula com mensagem clara e `exit 0` se não houver Chromium).
 
-**Estado no momento da escrita.** Código em `projects/limiar/` (commit `d0205d3`): 61 arquivos em `src/`, 10 suítes de teste, `e2e/smoke.mjs`. Verificado nesta máquina: `npm run typecheck` verde; `vitest` **10 suítes / 135 testes verdes**; `e2e/artifacts/smoke.json` com `ok: true`, zero erros de console, 4 draw calls (sombras desligadas por `?shadows=0`), ≈ 21 fps em SwiftShader. Desvios em relação ao design estão na [seção 19 da arquitetura](./03-arquitetura.md#19-divergências-entre-o-design-técnico-e-o-código).
+**Estado no momento da escrita.** Código em `projects/limiar/` (commits `d0205d3` — esqueleto — e `1b98b93` — auditoria — mais as correções desta rodada): 62 arquivos em `src/` (61 `.ts` + `styles.css`), 11 suítes de teste, `e2e/smoke.mjs`. Verificado nesta máquina: `npm run typecheck` verde; `vitest` **11 suítes / 150 testes verdes**; `e2e/artifacts/smoke.json` com `ok: true`, zero erros de console, 4 draw calls (sombras desligadas por `?shadows=0`), ≈ 21 fps em SwiftShader. Desvios em relação ao design estão na [seção 19 da arquitetura](./03-arquitetura.md#19-divergências-entre-o-design-técnico-e-o-código).
 
 ### 3.1 Checklist — infraestrutura
 
@@ -73,7 +73,7 @@ Ordem obrigatória: M0 → M1 → M2 → M3 → M4 → M5. Cada milestone depend
 - [x] `debug-stats.ts` — FPS, frame time (avg/max 1 s, média 3 s), `renderer.info`
 - [x] `storage.ts` — `SaveStore<T>` com envelope `{ version, savedAt, payload }`, `validate` obrigatório e `migrations` (testado com `tests/helpers/fake-storage.ts`)
 - [x] `url-flags.ts` — `parseUrlFlags`/`readUrlFlags`: `?nolock`, `?shadows`, `?debug`, `?scale`, `?seed`, `?hud`
-- [x] `math/index.ts` (`clamp`, `lerp`, `damp`, `moveTowards`, `rayCapsule`, …), `math/spring.ts` (`Spring`, com sub-passos internos), `math/random.ts` (`Random`, mulberry32)
+- [x] `math/index.ts` (`clamp`, `lerp`, `damp`, `moveTowards`, `rayCapsule`, …), `math/spring.ts` (`Spring` com solução fechada do oscilador, exata para qualquer dt; `kickToPeak`/`peakFactor`), `math/random.ts` (`Random`, mulberry32)
 - [x] `physics/layers.ts` (`CollisionLayer` como objeto `as const` + `CollisionMask`, não `const enum`), `physics/movement-config.ts` (tipo), `physics/capsule-body.ts` (`CapsuleBody`, `MoveIntent`, `integrateCapsuleBody` pura), `physics/collision-resolve.ts` (`resolveCapsuleCollision` com step-up e snap ao chão)
 - [x] `physics/collision-query.ts` — interface `CollisionQuery` (`CapsuleHit`, `RayHit`) declarada em `core/` e implementada por `world/collision-world.ts` — mantém `core/` sem importar `world/`
 
@@ -82,8 +82,8 @@ Ordem obrigatória: M0 → M1 → M2 → M3 → M4 → M5. Cada milestone depend
 - [x] `palette.ts` — cores nomeadas (ocre, ferrugem, ciano-vigia, magenta-maré, névoa, raridades)
 - [x] `elements.ts` — Brasa (`ember`), Ressonância (`resonance`), Névoa (`haze`)
 - [x] `factions.ts` — Axioma (`axiom`), Ferrugem (`rust`), Cepa (`strain`)
-- [x] `movement-config.ts`, `camera-config.ts`, `feel-config.ts` — objetos mutáveis com `import.meta.hot.accept` + `Object.assign`
-- [x] `render-config.ts` — `RENDER`, `RENDER_SCALE_ALT`, `SHADOW_AUTO_OFF`; o HMR fica em `game/game.ts` (`hot.accept('../data/render-config')`), porque `data/` não conhece o renderer (desvio nº 5 da arquitetura)
+- [x] `hot-config.ts` (`keepLive`, `onConfigHotUpdate`), `movement-config.ts`, `camera-config.ts`, `feel-config.ts` — objetos mutáveis: `keepLive(import.meta.hot, chave, valores)` (mesma referência via `import.meta.hot.data`) + `import.meta.hot.accept()` literal
+- [x] `render-config.ts` — `RENDER` (`keepLive` com `assignRenderConfig`), `RENDER_SCALE_ALT`, `SHADOW_AUTO_OFF`; o módulo também se auto-aceita, e a **aplicação** (renderer + luzes) fica em `game/game.ts`, que ouve `onConfigHotUpdate('render')`, porque `data/` não conhece o renderer (desvio nº 5 da arquitetura)
 - [x] `settings-defaults.ts` — `Settings` (sensibilidade, hFOV, sombras, render scale, HUD de debug) + versão do save
 - [x] `input-bindings.ts` — mapeamento `code → Action`; já inclui `KeyC` crouch, `KeyR` reload, `KeyF` melee, `KeyQ` granada, `KeyE` habilidade de classe, `KeyX` super, `KeyG` interagir (sem efeito até M1–M3)
 - [x] `levels/level-def.ts` — `LevelDef`, `PrimitiveDef` (`box`/`ramp`/`cylinder`), `SpawnPoint`, `coverPoints`, `killPlaneY`
@@ -107,12 +107,13 @@ Ordem obrigatória: M0 → M1 → M2 → M3 → M4 → M5. Cada milestone depend
 
 - [x] `tests/architecture.test.ts` — regras de dependência entre pastas (§3.2 do design técnico)
 - [x] `tests/core/{loop,input,events,spring,random,storage}.test.ts`
-- [x] `tests/physics/integrate.test.ts` — pulo de toque 1,40 ± 0,03 m; hold entre 2,0 e 2,4 m; coyote time; jump buffer; controle aéreo; `maxFallSpeed`
-- [x] `tests/physics/collision.test.ts` — rampas 20,6° (snap), 40° (anda) e 53° (escorrega); degraus 0,25/0,35 (sobe) e 0,50 (só com pulo); corredor de 1,2 m; parede sem quicar; `raycast` com máscara, `entity` e hitbox; Campo de Provas real construído
+- [x] `tests/physics/integrate.test.ts` — pulo de toque 1,40 ± 0,03 m (zona morta do hold); hold entre 2,0 e 2,4 m; coyote time; jump buffer; controle aéreo (sprint-jump preserva 8,5 m/s; strafe não passa de `airMaxSpeed`; S freia); `maxFallSpeed`
+- [x] `tests/physics/collision.test.ts` — rampas 20,6° (snap), 40° (sobe e desce, andando e em sprint, sem perder o chão) e 53° (escorrega); degraus 0,25/0,35 (sobe) e 0,50 (só com pulo); escada descida sem ar nem pouso; sair de um caixote de 1 m continua queda; corredor de 1,2 m; parede sem quicar; `raycast` com máscara, `entity` e hitbox; Campo de Provas real construído
 - [x] `tests/data/definitions.test.ts` — `validateDefs(DEFS)` passa; ids; cores; spawn `player`; `killPlaneY < 0`; rampas e limites do Campo de Provas
+- [x] `tests/data/hot-config.test.ts` — `keepLive` (HMR de configuração: mesmo objeto, valores novos)
 - [x] `tests/helpers/fake-storage.ts`
 - [x] `e2e/smoke.mjs` — build + preview em porta livre, Chromium headless (SwiftShader), `?nolock=1&shadows=0&debug=1&seed=1`, `window.__limiar.input.inject(...)` (anda, vira 90°, anda de lado, pula, liga o HUD); asserta zero erros de console, `state === 'running'`, WebGL2, andou ≥ 4 m, `grounded`, `drawCalls ≤ 30`, `fps > 5`; salva `e2e/artifacts/smoke*.png` e `smoke.json`
-- [x] `npm run check` verde (typecheck + 135 testes + build + e2e `ok: true`)
+- [x] `npm run check` verde (typecheck + 150 testes + build + e2e `ok: true`)
 
 ### 3.6 Checklist — documentação
 
@@ -129,11 +130,11 @@ Ordem obrigatória: M0 → M1 → M2 → M3 → M4 → M5. Cada milestone depend
 ### 3.7 Critério de pronto de M0
 
 - [x] e2e verde em SwiftShader (`e2e/artifacts/smoke.json`: `ok: true`, `errors: []`)
-- [ ] ≤ 16 draw calls **com sombras** no HUD de debug (esperado ≈ 12) — o e2e mede 4 sem sombras; o número com sombras precisa ser lido no HUD (F3) numa máquina com GPU e anotado em `05-performance.md` §7
+- [x] ≤ 16 draw calls **com sombras** no HUD de debug — medido **8** (4 chunks + 4 da passada de sombra; 13 com os helpers de F6) em Chromium headless com `?shadows=1` (sonda por `window.__limiar.stats`, registrada em `05-performance.md` §7); o e2e mede 4 sem sombras
 - [x] 60 fps estáveis com sombras numa iGPU real — **ou** registro de que não havia iGPU: registrado (`05-performance.md` §7 "nenhuma medição em iGPU real" e `03-arquitetura.md` §19: SwiftShader ≈ 20 fps a 1280 × 720). A medição em iGPU continua pendente e reabre este item quando houver máquina
 - [ ] 5 minutos andando e pulando no Campo de Provas sem prender em geometria, sem quicar em rampa, subindo os degraus de 0,25 m e 0,35 m — coberto por testes unitários; a sessão manual de 5 min ainda não foi feita
 - [ ] Heap plano por 5 minutos (zero alocação por frame nos hot paths) — só mensurável no painel Memory de um navegador real; checklist em `05-performance.md` §6.4
-- [ ] HMR de `src/data/movement-config.ts` altera `walkSpeed` sem recarregar a página — implementado (`import.meta.hot.accept` no módulo), não exercitado por automação
+- [x] HMR de `src/data/movement-config.ts` altera `walkSpeed` sem recarregar a página — verificado manualmente com `vite dev` + Chromium (`walkSpeed` 6 → 7 → 8 → 9 sem reload; registrado em `03-arquitetura.md` §15.1/§19 e no comentário de `src/data/hot-config.ts`); a lógica de `keepLive` é coberta por `tests/data/hot-config.test.ts`. Sem automação permanente desse caminho
 - [x] **Parar e mostrar rodando** (Seção 5 do master prompt) — screenshots em `e2e/artifacts/smoke-ready.png`, `smoke-walk.png`, `smoke-hud.png`
 
 ### 3.8 O que NÃO entra em M0
@@ -371,7 +372,7 @@ cd /home/user/Personal/projects/limiar
 npm install            # dependências (versões exatas, ~10 s)
 npm run dev            # http://127.0.0.1:5173 — HMR de src/data/*-config.ts, HUD de debug ligado
 npm run typecheck      # TS estrito (src, tests, configs, e2e)
-npm test               # vitest (lógica pura em Node, sem WebGL) — 10 suítes
+npm test               # vitest (lógica pura em Node, sem WebGL) — 11 suítes, 150 testes
 npm run build          # vite build (imprime tamanho gz por chunk — orçamento < 250 KB gz)
 npm run preview        # serve dist/ em http://127.0.0.1:4173 (use este para medir performance)
 npm run test:e2e       # smoke em Chromium headless (SwiftShader); pula com aviso se não houver Chromium

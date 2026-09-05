@@ -303,7 +303,7 @@ Regra de código: sistemas **leem `world.cfg.movement.walkSpeed` no momento do u
 
 - `core/math/random.ts`: `class Random { constructor(seed: number); next(): number /*[0,1)*/; range(min,max); int(min,max); pick<T>(arr); seed }` — mulberry32. `World.rng` é criado com `?seed=` da URL ou `Date.now()`. Loot com rolagem reprodutível em teste depende disso.
 - `core/storage.ts`: `SaveStore<T>` com envelope `{ version, savedAt, payload }` em `localStorage`, `migrations: Array<(old: unknown) => unknown>` aplicadas em sequência, `load(): T | null`, `save(payload)`, `clear()`. Em M0 persiste só `Settings` (chave `limiar.settings`). Inventário/loadout/progressão em M4 usam a mesma classe.
-- `core/math/spring.ts`: `class Spring { value; velocity; constructor(zeta, omega); kick(dv); step(dt); reset() }` — mola amortecida semi-implícita (estável para ω·dt ≤ 0,5). Usada pelo kick de pouso e pelo slot de recoil.
+- `core/math/spring.ts`: `class Spring { value; velocity; constructor(zeta, omega); kick(dv); kickToPeak(peak); step(dt); reset(); static peakFactor(zeta) }` — mola amortecida integrada pela solução fechada do oscilador (exata para qualquer dt, sem sub-passos). `kickToPeak(peak)` = `kick(peak·ω / peakFactor(ζ))`: a resposta ao impulso só atinge `peakFactor(ζ)·v0/ω` (≈ 0,50 em ζ = 0,6; e⁻¹ em ζ = 1), então o pico anunciado no config é o pico real. Usada pelo kick de pouso e pelo slot de recoil.
 - `core/math/index.ts`: `clamp`, `lerp`, `damp(a,b,lambda,dt)` (= `MathUtils.damp`), `moveTowards`, `moveTowardsVec2XZ`, `deg`, `rad`, `snapToGrid`, `rayCapsule(origin, dir, capsule, out)`.
 - `core/url-flags.ts`: lê `?nolock=1`, `?shadows=0`, `?debug=1`, `?scale=0.75`, `?seed=123`, `?hud=1`.
 
@@ -423,24 +423,24 @@ Unidade: **1 unidade = 1 metro**, Y para cima. Convenção de yaw: `yaw = 0` olh
 | `groundAccel` | **60 m/s²** | 0 → 6 m/s em 0,1 s: responsivo com peso. |
 | `groundDecel` | **80 m/s²** | Para em ~0,08 s. Destiny não desliza ao soltar a tecla. |
 | `airAccel` | **12 m/s²** | Corrige pulos; não "voa". |
-| `airMaxSpeed` | = `walkSpeed` | Controle aéreo não ganha velocidade acima de andar. |
+| `airMaxSpeed` | = `walkSpeed` | Controle aéreo não **ganha** velocidade acima de andar — e nunca **freia** o momentum já existente (sprint-jump mantém 8,5 m/s segurando W). |
 | `gravity` | **−24 m/s²** | ≈ 2,45 g: descida "snappy". |
 | `jumpHeight` | **1,40 m** (toque) | Sobe um caixote de 1 m e a plataforma de 1,2 m; não sobe 1,8 m sem segurar. |
-| `jumpHoldGravityScale` / `jumpHoldMaxTime` | **0,50 / 0,25 s** | Segurar pulo → ≈ **2,2 m** (2,24 m analítico): toque flutuante de Destiny sem duplo pulo (que é habilidade de classe). |
+| `jumpHoldGravityScale` / `jumpHoldDeadTime` / `jumpHoldMaxTime` | **0,50 / 0,08 s / 0,25 s** | Segurar pulo → ≈ **2,1 m**: toque flutuante de Destiny sem duplo pulo (que é habilidade de classe). A zona morta existe porque o keydown que salta já chega com `jumpHeld = true`: um toque humano (≤ ~80 ms) fica em 1,40 m; 133 ms dá ≈ 1,6 m (< 1,7 m); só segurar de verdade sobe 2,1 m. |
 | `maxFallSpeed` | −40 m/s | Clamp. |
 | `coyoteTime` / `jumpBufferTime` | **0,10 s / 0,10 s** | |
 | `slopeLimitDeg` | **46°** (`normal.y ≥ cos 46° = 0,695`) | Abaixo: chão. Acima: parede (escorrega). Não existe "rampa lenta". |
 | `stepHeight` | **0,35 m** | Degraus e beiradas sem pulo (só quando `grounded`). |
-| `groundSnapDistance` | **0,20 m** | Mantém `grounded` descendo rampas (evita "quicar"). |
+| `groundSnapDistance` | **0,40 m** | Mantém `grounded` descendo rampas e degraus (evita "quicar"). Regra: ≥ `stepHeight` + queda por passo no limite de rampa em sprint (0,35 + 8,5/60 · tan 46° ≈ 0,50 m seria o teto seguro); 0,40 cobre o Campo de Provas e ainda não gruda ao sair de um caixote de 1 m. Com 0,20 m a rampa de 40° lançava o jogador no ar e a escada de 0,25 m dava 4 quedas. |
 
 **Velocidade de salto com correção de discretização.** Em Euler semi-implícito a 60 Hz a altura real fica ~`v0·dt/2` abaixo da analítica. Usamos `jumpSpeed = √(2·|g|·jumpHeight) + |g|·dt/2` = 8,198 + 0,2 = **8,40 m/s**, e o teste exige altura de toque **1,40 ± 0,03 m** e de hold entre **2,0 e 2,4 m**.
 
 **`integrateCapsuleBody(t, body, intent, cfg, dt, out)` — função pura, por passo fixo:**
 
 1. Timers: se `!grounded` → `timeSinceGrounded += dt`; `jumpBufferTimer = max(0, jumpBufferTimer − dt)`; se `intent.jumpPressed` → `jumpBufferTimer = cfg.jumpBufferTime`.
-2. Horizontal: `wish = right·dir.x + forward·dir.y` (normalizado se |dir| > 1); `speed = sprint && dir.y > 0,5 ? sprintSpeed : walkSpeed`; `target = wish·speed`. Se `grounded`: `accel = |wish| > 0 ? groundAccel : groundDecel`; senão `accel = airAccel` e `target` limitado a `airMaxSpeed`. `vel.xz = moveTowards(vel.xz, target, accel·dt)`. (No ar sem input, a velocidade horizontal **não** decai — sem atrito aéreo.)
+2. Horizontal: `wish = right·dir.x + forward·dir.y` (normalizado se |dir| > 1); `speed = sprint && dir.y > 0,5 ? sprintSpeed : walkSpeed`; `target = wish·speed`. Se `grounded`: `accel = |wish| > 0 ? groundAccel : groundDecel`; `vel.xz = moveTowards(vel.xz, target, accel·dt)`. Senão (no ar, com input) *air-accelerate* com cap de módulo: `u = wish/|wish|`; `cap = min(speed, airMaxSpeed)`; `along = vel.xz · u`; `add = min(airAccel·dt, max(0, cap − along))`; `vel.xz += u · add`; depois `limit = max(|vel.xz| anterior, airMaxSpeed)` e, se `|vel.xz| > limit`, escala `vel.xz` para `limit`. Só soma ao longo do `wish` até o cap — nunca reduz o módulo existente (frear é só empurrando contra a velocidade) — e o clamp impede ganhar velocidade por strafe. (No ar sem input, a velocidade horizontal **não** decai — sem atrito aéreo.)
 3. Pulo: se `jumpBufferTimer > 0 && (grounded || (timeSinceGrounded ≤ coyoteTime && !airborneByJump))` → `vel.y = jumpSpeed`, `grounded = false`, `airborneByJump = true`, `jumpBufferTimer = 0`, `jumpHoldTimer = 0`, `out.jumped = true`.
-4. Vertical: `holdActive = airborneByJump && intent.jumpHeld && vel.y > 0 && jumpHoldTimer < jumpHoldMaxTime`; `jumpHoldTimer += dt` se `holdActive`; `g = gravity · (holdActive ? jumpHoldGravityScale : 1)`; `vel.y = max(vel.y + g·dt, maxFallSpeed)`.
+4. Vertical: `jumpHoldTimer += dt` se `airborneByJump && intent.jumpHeld && vel.y > 0` (tempo total segurado desde o salto); `holdActive = airborneByJump && intent.jumpHeld && vel.y > 0 && jumpHoldTimer > jumpHoldDeadTime && jumpHoldTimer ≤ jumpHoldDeadTime + jumpHoldMaxTime`; `g = gravity · (holdActive ? jumpHoldGravityScale : 1)`; `vel.y = max(vel.y + g·dt, maxFallSpeed)`.
 5. `prevPosition.copy(position)`; `position += vel·dt`. A colisão (§5.2) corrige depois.
 
 Sem massa/força: modelo "velocidade desejada + aceleração" (Destiny/Halo), não fricção Source/Quake. O dash do Rastreador (M3) é um impulso em `body.velocity` por N passos — não toca esta função.
@@ -490,7 +490,7 @@ repita ≤ 5×:
 pos = capsule.start − (0, r, 0)
 se wasGrounded && !body.grounded && vel.y ≤ 0 && !jumpedThisStep:   // snap ao chão
   se collision.raycast(pos + (0, 0.05, 0), (0,-1,0), groundSnapDistance + 0.05, World, hit) && hit.normal.y ≥ cos(slopeLimit):
-    pos.y = hit.point.y; body.grounded = true; vel.y = 0
+    pos.y = hit.point.y + r·(1/hit.normal.y − 1); body.grounded = true; vel.y = 0   // esfera de baixo tangente ao plano (pés no ponto = serrote de 12 cm a 40°)
 se body.grounded: timeSinceGrounded = 0; airborneByJump = false
 se !wasGrounded && body.grounded: emit player:landed { fallSpeed: −velYAntesDoPasso }
 ```
@@ -537,7 +537,7 @@ rig.root (Object3D)                   posição = pés interpolados; rotation.y 
 
 ### 5.5 Feel de câmera em M0 (`systems/camera-feel.ts`, valores em `data/feel-config.ts`)
 
-- **Kick de pouso:** em `player:landed`, `amp = clamp(fallSpeed / 20, 0, 1)`; `landKickPitch.kick(amp · 2,5° · ω)`, `landKickPosY.kick(−amp · 0,06 m · ω)`; molas ζ 0,6, ω 22 rad/s.
+- **Kick de pouso:** em `player:landed`, `amp = clamp(fallSpeed / 20, 0, 1)`; `landKickPitch.kickToPeak(−amp · 2,5°)`, `landKickPosY.kickToPeak(−amp · 0,06 m)` (pitch negativo = olhar para baixo; o impulso é calibrado para que 2,5° / 6 cm sejam o **pico** real); molas ζ 0,6, ω 22 rad/s.
 - **Slot de recoil:** `recoilPitch`/`recoilYaw` são `Spring`s (ζ 0,55, ω 26) com uma componente `recoilOffset` que a arma (M1) desloca e o `recoveryPerSec` (18°/s) traz de volta. Em M0 o evento `camera:kick` (tecla **F9**) dispara `{ pitchDeg: 1,2, yawDeg: ±0,3, posBack: 0,02 }` para afinar a mola antes de existir arma.
 - **Head-bob:** `feel.headBob = { enabled: false, ampY: 0,018, ampX: 0,010, rollDeg: 0,25, hz: 1,9 }` — implementado (15 linhas: `y = A·|sin(2πft)|`, `x = A_x·sin(πft)`, amplitude escalada por `speed/walkSpeed`, 0 no ar, com damp) mas **desligado por padrão** (acessibilidade e escopo). Toggle no painel.
 - **Crouch/slide:** fora de M0 (M1 traz crouch; slide é pós-MVP). Não há campos deles na config em M0 — evitar config morta.
@@ -773,7 +773,7 @@ export default defineConfig({
 | `tests/core/spring.test.ts` | mola converge a 0; kick produz pico e retorno sem overshoot excessivo em ζ 0,6 |
 | `tests/core/random.test.ts` | mesma seed → mesma sequência; distribuição de `range` em [0,1) |
 | `tests/core/storage.test.ts` | envelope versionado, migrations em sequência, payload inválido → `null` (com `localStorage` fake) |
-| `tests/physics/integrate.test.ts` | altura de toque 1,40 ± 0,03; hold ∈ [2,0, 2,4]; velocidade máx; decel para em < 0,1 s; controle aéreo não excede `airMaxSpeed`; coyote e jump buffer |
+| `tests/physics/integrate.test.ts` | altura de toque (≤ 4 passos segurado) 1,40 ± 0,03; toque de 133 ms < 1,7; hold ∈ [2,0, 2,4]; velocidade máx; decel para em < 0,1 s; controle aéreo não excede `airMaxSpeed`; sprint-jump preserva 8,5 m/s; S freia; coyote e jump buffer |
 | `tests/physics/collision.test.ts` | nível sintético (chão, parede, rampas 20,6°/40°/53°, degrau 0,25/0,5, corredor 1,2 m) via `level-builder` + `CollisionWorld`: grounded em rampa 40°, escorrega em 53°, sobe 0,25 e 0,35 (step-up), não sobe 0,5, não prende no corredor; `raycast` acerta chão e hitbox com `entity` |
 | `tests/data/definitions.test.ts` | `validateDefs(DEFS)` passa; ids únicos; cores hex; nível tem spawn `player`; `killPlaneY < 0` |
 | `tests/architecture.test.ts` | regras de dependência do §3.2 |
@@ -955,16 +955,18 @@ Em todos os casos: **arquivos novos** em `data/`, `entities/`, `systems/`, `ui/`
 
 ### M0 — Esqueleto (esta entrega)
 
-- [ ] Pastas, `package.json`, `tsconfig`, `vite.config`, `vitest.config`, `.gitignore`, `README.md`
-- [ ] `core/`: time, loop, input (bordas por passo, inject), pointer-lock (fallback unlocked), renderer (2 passadas, render scale, resize), layers, camera-rig (hFOV, viewmodel camera, weaponSocket), events (queue/flush), entity (EntityStore), debug-stats, storage, url-flags, math (spring, random, rayCapsule), physics (layers, capsule-body, collision-resolve)
-- [ ] `data/`: palette, elements, factions, movement/camera/feel/render configs com HMR, settings-defaults, input-bindings, level-def, test-ground, index + validateDefs
-- [ ] `world/`: collision-world (Octree + hitboxes + raycast com máscara), level-builder (4 chunks por quadrante, cor por vértice, rampas, cilindros com faixas, helpers), materials, lighting (snap de sombra)
-- [ ] `entities/`: player, static-world; `systems/`: player-input, character-physics (step-up, snap, eventos), kill-plane, locomotion-state, player-look, camera-feel (kick de pouso, slot de recoil, FOV dinâmico, head-bob desligado), view-sync, camera-sync, debug-stats-system (auto-desligar sombras)
-- [ ] `game/`: game, world, events, state, systems-list, debug-api; `ui/`: overlay, debug-hud, tuning-panel (lil-gui via import dinâmico)
-- [ ] 10 suítes vitest verdes; `e2e/smoke.mjs` verde em SwiftShader; `npm run check` verde
-- [ ] `docs/limiar/`: README, design.md, roadmap.md, performance.md, decisoes/0001–0007
-- [ ] **Critério de pronto:** e2e verde; ≤ 16 draw calls com sombras no HUD; 60 fps estáveis com sombras numa iGPU real (ou registrado em `performance.md` que não havia iGPU disponível e o número em SwiftShader); 5 minutos andando/pulando no mundo de teste sem prender em geometria, sem quicar em rampa e subindo o degrau de 0,25 m e 0,35 m; heap plano por 5 min; HMR de `movement-config.ts` altera `walkSpeed` sem recarregar a página.
-- [ ] Parar e mostrar rodando.
+> **Nota de conformidade (M0 entregue; verificação final da documentação).** Tudo abaixo existe e `npm run check` está verde (11 suítes / 150 testes; e2e `ok: true`). Desvios reais em relação ao texto deste documento, todos registrados com motivo na [seção 19 da arquitetura](./03-arquitetura.md#19-divergências-entre-o-design-técnico-e-o-código): (1) HMR de configuração por `keepLive` em `data/hot-config.ts` (objeto vivo em `import.meta.hot.data`) + `import.meta.hot.accept()` literal, não pelo callback de `accept` do §3.5 — `render-config.ts` também se auto-aceita e `game/game.ts` reaplica via `onConfigHotUpdate`; (2) `CollisionLayer` é objeto `as const` + `CollisionMask`, não `const enum`; `CapsuleHit`/`RayHit`/`CollisionQuery` vivem em `core/physics/collision-query.ts`; `RayHit.entity` é `EntityId | null`; (3) `Spring` usa a solução fechada do oscilador com `kickToPeak`/`peakFactor`; (4) `groundSnapDistance` 0,40 m com snap tangente; step-up dispara em qualquer contato não caminhável; slide no chão só pela projeção horizontal da normal; (5) `Renderer` é classe (`applyConfig`/`renderFrame`/`setRenderScale`); `RenderConfig` inclui `lights`/`shadow`/`fogDensity`; (6) `vite.config.ts` usa `build.rolldownOptions.output.codeSplitting`, não `advancedChunks`; (7) `tests/` tem 11 arquivos (mais `tests/data/hot-config.test.ts`) e o e2e usa porta livre, vira 90°, pula e liga o HUD; (8) `entities/static-world.ts` importa `world/level-builder` (sem ciclo); (9) `docs/limiar/` usa os nomes `01…06-*.md` (não `design.md`/`roadmap.md`/`performance.md`); (10) draw calls medidos: **4** sem sombras, **8** com sombras (não ≈ 12) — o chão entra nos chunks com `castShadow`; (11) `debugHelper()` é um único `LineSegments`, não `Box3Helper` por nó; (12) auto-desligar sombras só após 6 s com sombras ligadas, só em `running`, sem tocar `settings.shadows`. Pendências do critério de pronto (não são desvios): medição em iGPU real, sessão manual de 5 min e heap plano — ver [roadmap §3.7](./04-roadmap.md).
+
+- [x] Pastas, `package.json`, `tsconfig`, `vite.config`, `vitest.config`, `.gitignore`, `README.md`
+- [x] `core/`: time, loop, input (bordas por passo, inject), pointer-lock (fallback unlocked), renderer (2 passadas, render scale, resize), layers, camera-rig (hFOV, viewmodel camera, weaponSocket), events (queue/flush), entity (EntityStore), debug-stats, storage, url-flags, math (spring, random, rayCapsule), physics (layers, capsule-body, collision-resolve)
+- [x] `data/`: palette, elements, factions, movement/camera/feel/render configs com HMR, settings-defaults, input-bindings, level-def, test-ground, index + validateDefs
+- [x] `world/`: collision-world (Octree + hitboxes + raycast com máscara), level-builder (4 chunks por quadrante, cor por vértice, rampas, cilindros com faixas, helpers), materials, lighting (snap de sombra)
+- [x] `entities/`: player, static-world; `systems/`: player-input, character-physics (step-up, snap, eventos), kill-plane, locomotion-state, player-look, camera-feel (kick de pouso, slot de recoil, FOV dinâmico, head-bob desligado), view-sync, camera-sync, debug-stats-system (auto-desligar sombras)
+- [x] `game/`: game, world, events, state, systems-list, debug-api; `ui/`: overlay, debug-hud, tuning-panel (lil-gui via import dinâmico)
+- [x] 11 suítes vitest verdes (150 testes); `e2e/smoke.mjs` verde em SwiftShader; `npm run check` verde
+- [x] `docs/limiar/`: README, design.md, roadmap.md, performance.md, decisoes/0001–0007 (entregues como `README.md`, `01-visao-e-design.md`, `02-design-tecnico.md`, `03-arquitetura.md`, `04-roadmap.md`, `05-performance.md`, `06-guia-de-desenvolvimento.md`, `decisoes/0001–0007`)
+- [ ] **Critério de pronto** (parcial — cumprido: e2e verde; 8 draw calls com sombras; HMR de `walkSpeed` verificado manualmente; pendente: iGPU real, sessão manual de 5 min, heap plano — detalhes no [roadmap §3.7](./04-roadmap.md)): e2e verde; ≤ 16 draw calls com sombras no HUD; 60 fps estáveis com sombras numa iGPU real (ou registrado em `performance.md` que não havia iGPU disponível e o número em SwiftShader); 5 minutos andando/pulando no mundo de teste sem prender em geometria, sem quicar em rampa e subindo o degrau de 0,25 m e 0,35 m; heap plano por 5 min; HMR de `movement-config.ts` altera `walkSpeed` sem recarregar a página.
+- [x] Parar e mostrar rodando (screenshots em `e2e/artifacts/smoke*.png`).
 
 ### M1 — Gunplay (pilar nº 1)
 

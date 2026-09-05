@@ -1,3 +1,4 @@
+import { SETTINGS_RANGES } from '@/data/settings-defaults';
 import type { World } from '@/game/world';
 
 /**
@@ -65,6 +66,7 @@ function buildGui(GUI: LilGuiModule['GUI'], host: HTMLElement, world: World, hoo
   m.add(movement, 'gravity', RANGES.gravity.min, RANGES.gravity.max, RANGES.gravity.step);
   m.add(movement, 'jumpHeight', 0.2, 4, 0.05);
   m.add(movement, 'jumpHoldGravityScale', RANGES.small.min, RANGES.small.max, RANGES.small.step);
+  m.add(movement, 'jumpHoldDeadTime', RANGES.seconds.min, RANGES.seconds.max, RANGES.seconds.step);
   m.add(movement, 'jumpHoldMaxTime', RANGES.seconds.min, RANGES.seconds.max, RANGES.seconds.step);
   m.add(movement, 'coyoteTime', RANGES.seconds.min, RANGES.seconds.max, RANGES.seconds.step);
   m.add(movement, 'jumpBufferTime', RANGES.seconds.min, RANGES.seconds.max, RANGES.seconds.step);
@@ -128,10 +130,10 @@ function buildGui(GUI: LilGuiModule['GUI'], host: HTMLElement, world: World, hoo
 
   const s = gui.addFolder('settings');
   const settingsChanged = (path: string) => () => hooks.onSettingsChanged(path);
-  s.add(settings, 'sensitivityMultiplier', 0.1, 5, 0.05).onChange(settingsChanged('settings.sensitivityMultiplier'));
-  s.add(settings, 'hfovDeg', 80, 110, 1).onChange(settingsChanged('settings.hfovDeg'));
+  s.add(settings, 'sensitivityMultiplier', SETTINGS_RANGES.sensitivityMultiplier.min, SETTINGS_RANGES.sensitivityMultiplier.max, 0.05).onChange(settingsChanged('settings.sensitivityMultiplier'));
+  s.add(settings, 'hfovDeg', SETTINGS_RANGES.hfovDeg.min, SETTINGS_RANGES.hfovDeg.max, 1).onChange(settingsChanged('settings.hfovDeg'));
   s.add(settings, 'shadows').onChange(settingsChanged('settings.shadows'));
-  s.add(settings, 'renderScale', 0.25, 1, 0.05).onChange(settingsChanged('settings.renderScale'));
+  s.add(settings, 'renderScale', SETTINGS_RANGES.renderScale.min, SETTINGS_RANGES.renderScale.max, 0.05).onChange(settingsChanged('settings.renderScale'));
   s.add(settings, 'debugHud').onChange(settingsChanged('settings.debugHud'));
 
   gui

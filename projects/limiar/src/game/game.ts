@@ -19,7 +19,7 @@ import { INPUT_BINDINGS } from '@/data/input-bindings';
 import { TEST_GROUND, TEST_GROUND_TOWER_TOP } from '@/data/levels/test-ground';
 import { MOVEMENT } from '@/data/movement-config';
 import { PALETTE } from '@/data/palette';
-import { RENDER, RENDER_SCALE_ALT } from '@/data/render-config';
+import { RENDER, RENDER_SCALE_ALT, SHADOW_AUTO_OFF } from '@/data/render-config';
 import {
   DEFAULT_SETTINGS,
   isSettings,
@@ -29,13 +29,14 @@ import {
   type Settings,
 } from '@/data/settings-defaults';
 import { createPlayer, createStaticWorld, type AnyEntity } from '@/entities';
-import { placePlayer, respawnPlayer } from '@/systems/kill-plane';
+import { respawnPlayer, teleportPlayer } from '@/systems/kill-plane';
 import type { System } from '@/systems/system';
-import { DebugHud } from '@/ui/debug-hud';
+import { DebugHud, type HudView } from '@/ui/debug-hud';
 import { Overlay } from '@/ui/overlay';
 import { createTuningPanel, type TuningPanel } from '@/ui/tuning-panel';
 import { CollisionWorld } from '@/world/collision-world';
 import { applyLightingConfig, createLighting } from '@/world/lighting';
+import { disposeMaterials } from '@/world/materials';
 import { installDebugApi, uninstallDebugApi, type LimiarDebugApi } from './debug-api';
 import type { GameEvents } from './events';
 import type { GameState } from './state';
@@ -67,6 +68,8 @@ export class Game {
   private readonly pointerLock: PointerLockController;
   private readonly overlay: Overlay;
   private readonly hud: DebugHud;
+  /** Reutilizado: zero alocação por frame (o HUD só formata 4×/s). */
+  private readonly hudView: HudView;
   private readonly panel: TuningPanel;
   private readonly canvas: HTMLCanvasElement;
   private readonly debugApi: LimiarDebugApi | null;
@@ -130,7 +133,7 @@ export class Game {
     entities.add(staticWorld);
     entities.add(player);
 
-    this.stats = new DebugStats({ marks: import.meta.env.DEV });
+    this.stats = new DebugStats({ marks: import.meta.env.DEV, longWindowSec: SHADOW_AUTO_OFF.windowSec });
     this.world = createWorld({
       scene,
       rig,
@@ -192,6 +195,7 @@ export class Game {
       render: this.render,
     });
     this.loop.pause();
+    this.hudView = { world: this.world, loop: this.loop.stats, loopPaused: true, lockLabel: '', shadowsAutoOff: false };
     this.renderer.gl.setAnimationLoop((t) => this.loop.tick(t));
     this.setState('ready');
     this.overlay.show({ kind: 'ready', mode: this.pointerLock.mode });
@@ -234,6 +238,7 @@ export class Game {
     this.hud.dispose();
     this.overlay.dispose();
     if (this.debugApi) uninstallDebugApi(this.debugApi);
+    disposeMaterials();
     this.renderer.dispose();
   }
 
@@ -257,14 +262,18 @@ export class Game {
     const w = this.world;
     this.stats.mark('frame-start');
     w.time.frame += dt;
+    // Pausado não há passo fixo: consome as bordas aqui (F3/F7/F8 funcionam em
+    // 'ready'/'paused'); P/T/F4/F9 continuam só em running.
+    if (this.loop.paused) {
+      this.handleDisplayKeys();
+      w.input.endFixedStep();
+    }
     for (const s of this.systems) s.frameUpdate?.(w, dt, alpha);
-    this.hud.update({
-      world: w,
-      loop: this.loop.stats,
-      loopPaused: this.loop.paused,
-      lockLabel: this.lockLabel(),
-      shadowsAutoOff: this.shadowsAutoOff,
-    });
+    const v = this.hudView;
+    v.loopPaused = this.loop.paused;
+    v.lockLabel = this.lockLabel();
+    v.shadowsAutoOff = this.shadowsAutoOff;
+    this.hud.update(v);
     this.stats.mark('frame-end');
     this.stats.measure('frame', 'frame-start', 'frame-end');
   };
@@ -381,18 +390,14 @@ export class Game {
 
   // ---- Atalhos de debug (design §8.3), lidos por passo fixo (bordas) ----
 
-  private handleDebugKeys(): void {
-    const { input, settings, debug } = this.world;
+  /** Atalhos que só mexem em apresentação/settings (F3/F7/F8): valem também com o loop pausado. */
+  private handleDisplayKeys(): void {
+    const { input, settings } = this.world;
     if (input.justPressed('debugHud')) {
       settings.debugHud = !settings.debugHud;
       this.hud.setVisible(settings.debugHud);
       this.saveSettings();
     }
-    if (input.justPressed('debugPanel')) {
-      if (this.world.tuningMode) this.exitTuningMode(true);
-      else this.enterTuningMode();
-    }
-    if (input.justPressed('debugHelpers')) this.setHelpersVisible(!this.helpersVisible);
     if (input.justPressed('debugShadows')) {
       settings.shadows = !this.world.cfg.render.shadows;
       this.applySettings('settings.shadows');
@@ -401,10 +406,20 @@ export class Game {
       settings.renderScale = settings.renderScale === 1 ? RENDER_SCALE_ALT : 1;
       this.applySettings('settings.renderScale');
     }
+  }
+
+  private handleDebugKeys(): void {
+    const { input, debug } = this.world;
+    this.handleDisplayKeys();
+    if (input.justPressed('debugPanel')) {
+      if (this.world.tuningMode) this.exitTuningMode(true);
+      else this.enterTuningMode();
+    }
+    if (input.justPressed('debugHelpers')) this.setHelpersVisible(!this.helpersVisible);
     if (input.justPressed('debugKick')) this.debugKick();
     if (debug && input.justPressed('debugRespawn')) respawnPlayer(this.world, 'debug');
     if (debug && input.justPressed('debugTeleport')) {
-      placePlayer(this.world, TEST_GROUND_TOWER_TOP[0], TEST_GROUND_TOWER_TOP[1], TEST_GROUND_TOWER_TOP[2]);
+      teleportPlayer(this.world, TEST_GROUND_TOWER_TOP[0], TEST_GROUND_TOWER_TOP[1], TEST_GROUND_TOWER_TOP[2]);
     }
     // Escape só chega aqui no modo sem lock (com lock, o navegador sai do lock → pausa).
     if (input.justPressed('pause') && this.pointerLock.mode === 'unlocked') this.pause('user');
@@ -491,7 +506,8 @@ export class Game {
     if (this.disposed) return;
     if (key === 'render') {
       const w = this.world;
-      w.cfg.render.shadows = w.settings.shadows;
+      // Auto-off vence a edição a quente; F7 religa.
+      w.cfg.render.shadows = w.settings.shadows && !this.shadowsAutoOff;
       w.cfg.render.renderScale = w.settings.renderScale;
     }
     this.world.events.emit('config:changed', { path: key });

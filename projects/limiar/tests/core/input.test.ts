@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
-import { InputState, type InputBindings } from '@/core/input';
+import { InputState, isEditableTarget, type InputBindings } from '@/core/input';
 
 const BINDINGS: InputBindings = {
   KeyW: 'forward',
@@ -30,6 +30,13 @@ describe('InputState', () => {
     input.endFixedStep();
     expect(input.justReleased('jump')).toBe(false);
     expect(input.isDown('jump')).toBe(false);
+  });
+
+  it('isEditableTarget: campos de formulário e contentEditable; null não', () => {
+    expect(isEditableTarget({ tagName: 'INPUT' } as unknown as EventTarget)).toBe(true);
+    expect(isEditableTarget({ tagName: 'DIV', isContentEditable: true } as unknown as EventTarget)).toBe(true);
+    expect(isEditableTarget({ tagName: 'DIV', isContentEditable: false } as unknown as EventTarget)).toBe(false);
+    expect(isEditableTarget(null)).toBe(false);
   });
 
   it('códigos não mapeados são ignorados (sem preventDefault)', () => {

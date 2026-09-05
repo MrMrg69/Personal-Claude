@@ -28,7 +28,7 @@ Contagem por frame, **incluindo** a passada de sombra (cada mesh com `castShadow
 | Inimigos | 0 | ≤ 40 | Low-poly rígido, partes como children; materiais compartilhados. |
 | Projéteis / efeitos | 0 | ≤ 6 | `InstancedMesh` por tipo. |
 | Viewmodel | 0 (passada vazia) | 2–3 | Camada 1, câmera própria ([ADR 0006](decisoes/0006-viewmodel-duas-cameras.md)). |
-| Helpers de debug | 0–2 | 0–3 | Só com F6: Octree mesclado em 1 `LineSegments` + wireframe da cápsula. |
+| Helpers de debug | 0–5 | 0–5 | Só com F6: grade 1 m + grade 10 m + eixos + Octree mesclado em 1 `LineSegments` + wireframe da cápsula (medido: +5 → 13 com sombras). |
 | HUD | **0** | **0** | 100 % DOM (`src/ui/debug-hud.ts`). |
 | **Total** | **≤ 16** | **≤ 150** | `renderer.info.render.calls`; e2e falha acima de 30. |
 
@@ -43,7 +43,7 @@ Quando o orçamento estoura, nesta ordem:
 
 ## 3. Plano de medição (§6.6)
 
-- `performance.mark/measure` em três trechos, feitos em `src/game/game.ts` via `DebugStats.mark/measure`: `sim` (passos fixos), `frame` (sistemas de frame) e `render` (duas passadas). **Só em `npm run dev`** (`new DebugStats({ marks: import.meta.env.DEV })`); no build de produção as marcas não existem.
+- `performance.mark/measure` em três trechos, feitos em `src/game/game.ts` via `DebugStats.mark/measure`: `sim` (passos fixos), `frame` (sistemas de frame) e `render` (duas passadas). **Só em `npm run dev`** (`new DebugStats({ marks: import.meta.env.DEV, longWindowSec: SHADOW_AUTO_OFF.windowSec })`); no build de produção as marcas não existem. A timeline é limpa 1×/s (`performance.clearMarks/clearMeasures`) — sem isso acumulava ~540 entradas/s.
 - HUD de debug (F3) com FPS, frame time médio e máximo de 1 s, média de 3 s, `renderer.info`.
 - `window.__limiar.stats` (DEV ou `?debug=1`) expõe os mesmos números para o e2e e para o console (`__limiar.stats.snapshot()`).
 - SwiftShader (CI, `e2e/smoke.mjs`) valida **funcionamento** e draw calls, não performance. FPS medido nele não entra em nenhum relatório (seção 8).
@@ -57,7 +57,7 @@ Auto-desligar, implementado em `src/systems/debug-stats-system.ts` com os limiar
 
 | Condição | Ação |
 |---|---|
-| Menos de **6 s** desde o início (`graceSec`) | Nada: os primeiros frames incluem compilação de shaders. |
+| Menos de **6 s** com sombras ligadas (`graceSec`, contado desde que foram ligadas: início da sessão, F7, painel ou HMR) | Nada: os primeiros frames incluem compilação de shaders, e a média medida sem sombras não pode condenar as sombras recém-ligadas. |
 | Estado ≠ `running` ou sombras já desligadas | Nada. |
 | Média de frame nos últimos **3 s > 20 ms** (`frameAvgMs`, `windowSec`) | `cfg.render.shadows = false` **uma única vez**; emite `config:changed { path: 'render.shadows' }` (o jogo aplica no renderer e nas luzes) e `render:shadowsChanged { enabled: false, auto: true }`; o HUD mostra `sombras AUTO-OFF (F7 religa)`. **Não** altera `settings.shadows` (escolha do usuário). |
 | Usuário aperta F7 | Alterna manualmente; `settings.shadows` persiste a escolha. Não volta a desligar sozinho na mesma sessão. |
@@ -125,7 +125,7 @@ npm run preview        # http://127.0.0.1:4173
 - [ ] **Topo da torre** (tecla T, só com `?debug=1`) olhando para o centro do mapa — máximo de geometria em tela — 30 s.
 - [ ] Repetir o cenário "andando em círculo" com **sombras OFF** (F7) — 60 s.
 - [ ] Repetir com **scale 0,75** (F8), sombras ON — 60 s.
-- [ ] Helpers F6 ligados uma vez para confirmar que `draw` sobe no máximo +2 e volta ao desligar.
+- [ ] Helpers F6 ligados uma vez para confirmar que `draw` sobe +5 (13 com sombras) e volta ao desligar.
 
 ### 6.3 Frame time p95 (DevTools)
 
@@ -155,14 +155,15 @@ Preencher uma linha por sessão de medição. Sem iGPU disponível, registrar ex
 
 | Data | Hardware (GPU / CPU) | Resolução / DPR / scale | Sombras | avg (ms) | max 1 s (ms) | p95 (ms) | draw | tris | Observações |
 |---|---|---|---|---|---|---|---|---|---|
-| 2026-09-05 | SwiftShader (CPU, 4 vCPU, sem GPU) | headless / 1 / 1,0 | OFF (`?shadows=0`) | 47,7 | — | — | 4 | 1128 | `e2e/artifacts/smoke.json`; **não representa hardware real** (seção 8). |
+| 2026-09-05 | SwiftShader (CPU, 4 vCPU, sem GPU) | headless / 1 / 1,0 | OFF (`?shadows=0`) | 50,8 | — | — | 4 | 1128 | `e2e/artifacts/smoke.json`; **não representa hardware real** (seção 8). |
+| 2026-09-05 | SwiftShader (CPU, 4 vCPU, sem GPU) | headless / 1 / 1,0 | ON (`?shadows=1`) | — | — | — | 8 (13 com F6) | 2256 | Sonda manual por `window.__limiar.stats` no build de produção; confirma 4 + 4 da passada de sombra e +5 dos helpers. Frame time não anotado (não representa). |
 | — | — | — | — | — | — | — | — | — | Nenhuma medição em iGPU real registrada ainda. |
 
 ## 8. SwiftShader só valida funcionamento
 
 O e2e (`e2e/smoke.mjs`, `npm run test:e2e`) roda em Chromium headless com `--use-angle=swiftshader` — renderização por **software na CPU**, em ambiente de 4 CPUs sem GPU. Nele:
 
-- FPS e frame time **não representam** nenhum hardware real (última execução: ~21 fps, 47,7 ms por frame); o gate é apenas `fps > 5` (detecta loop quebrado).
+- FPS e frame time **não representam** nenhum hardware real (última execução: ~20 fps, 50,8 ms por frame); o gate é apenas `fps > 5` (detecta loop quebrado).
 - O que é validado: zero erros de console/página/rede, `state === 'running'`, WebGL2 ativo, o jogador andou ≥ 4 m para −Z, virou ~90° por `input.inject` de mouse e andou ≥ 1,5 m para −X, terminou `grounded`, `drawCalls ≤ 30`.
 - Sombras entram desligadas (`?shadows=0`) e o input é sintético (`?nolock=1` + `window.__limiar.input.inject`), porque pointer lock não existe em headless.
 - Artefatos em `e2e/artifacts/` (`smoke-ready.png`, `smoke-walk.png`, `smoke-hud.png`, `smoke.png`, `smoke.json`) servem para inspeção visual e para conferir draw calls, nunca para comparar performance entre commits.

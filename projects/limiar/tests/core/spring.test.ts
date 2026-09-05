@@ -4,7 +4,7 @@ import { Spring } from '@/core/math/spring';
 const DT = 1 / 60;
 
 describe('Spring', () => {
-  it('não diverge com frames longos (ω·dt = 2,6: sub-passos internos)', () => {
+  it('não diverge com frames longos (ω·dt = 2,6: solução fechada, sem sub-passos)', () => {
     const s = new Spring(0.55, 26);
     s.kick(1.2 * 26);
     let maxAbs = 0;
@@ -15,6 +15,20 @@ describe('Spring', () => {
     expect(Number.isFinite(s.value)).toBe(true);
     expect(maxAbs).toBeLessThan(1.5);
     expect(Math.abs(s.value)).toBeLessThan(1e-3);
+  });
+
+  it('integração exata: 1 passo de 0,5 s = 30 passos de 1/60 s (independente do frame rate)', () => {
+    for (const zeta of [0.6, 1, 1.5]) {
+      const one = new Spring(zeta, 22);
+      const many = new Spring(zeta, 22);
+      one.value = many.value = 0.3;
+      one.kick(4);
+      many.kick(4);
+      one.step(0.5);
+      for (let i = 0; i < 30; i++) many.step(DT);
+      expect(one.value, `ζ = ${zeta}`).toBeCloseTo(many.value, 9);
+      expect(one.velocity, `ζ = ${zeta}`).toBeCloseTo(many.velocity, 9);
+    }
   });
 
   it('converge para o alvo a partir de um deslocamento', () => {
@@ -40,12 +54,25 @@ describe('Spring', () => {
         minAfterPeak = s.value;
       }
     }
-    // Pico analítico para v0 = 2,5·ω, ζ 0,6: ≈ 0,76 (v0/ω · fator de amortecimento).
-    expect(peak).toBeGreaterThan(0.5);
-    expect(peak).toBeLessThan(1);
+    // Pico analítico para v0 = 2,5·ω, ζ 0,6: 2,5 · peakFactor(0,6) = 2,5 · 0,499 ≈ 1,25 (amostrado a 60 Hz).
+    expect(peak).toBeGreaterThan(1.2);
+    expect(peak).toBeLessThan(1.26);
+    expect(Spring.peakFactor(0.6)).toBeCloseTo(0.499, 2);
+    expect(Spring.peakFactor(1)).toBeCloseTo(Math.exp(-1), 6);
     // Razão analítica de overshoot para ζ 0,6 ≈ 0,095; margem para discretização.
     expect(Math.abs(minAfterPeak)).toBeLessThan(0.15 * peak);
     expect(Math.abs(s.value)).toBeLessThan(1e-2);
+  });
+
+  it('kickToPeak atinge o pico pedido (± 3 %) em ζ = 0,6 e ζ = 1', () => {
+    for (const zeta of [0.6, 1]) {
+      const s = new Spring(zeta, 22);
+      s.kickToPeak(1);
+      let max = 0;
+      for (let i = 0; i < 144; i++) max = Math.max(max, s.step(1 / 144));
+      expect(max, `ζ = ${zeta}`).toBeGreaterThan(0.97);
+      expect(max, `ζ = ${zeta}`).toBeLessThan(1.03);
+    }
   });
 
   it('segue um alvo diferente de zero e reset zera tudo', () => {

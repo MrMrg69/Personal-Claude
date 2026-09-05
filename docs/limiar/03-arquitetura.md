@@ -33,10 +33,10 @@ Números de referência do M0 (medidos no e2e em SwiftShader e no dev server):
 | Métrica | Valor |
 |---|---|
 | Arquivos em `src/` | 62 (`.ts` + `styles.css` + `vite-env.d.ts`) |
-| Draw calls por frame | **4** sem sombras · **8** com sombras (4 chunks + 4 da passada de sombra) · +4 com helpers (F6) |
+| Draw calls por frame | **4** sem sombras · **8** com sombras (4 chunks + 4 da passada de sombra) · +5 com helpers (F6: grade 1 m, grade 10 m, eixos, Octree, cápsula) → 9 / 13 |
 | Triângulos visíveis | ≈ 1,1–2,3 k conforme o frustum; Campo de Provas inteiro em 4 meshes (uma por quadrante) |
-| Bundle de produção | `three` ≈ 538 kB (135 kB gz) + jogo ≈ 56 kB (20,5 kB gz) + CSS ≈ 1 kB |
-| Testes | 11 suítes vitest (140 testes) + `e2e/smoke.mjs` |
+| Bundle de produção | `three` ≈ 539 kB (135 kB gz) + jogo ≈ 59 kB (21,4 kB gz) + CSS ≈ 2,6 kB (1,1 kB gz) |
+| Testes | 11 suítes vitest (150 testes) + `e2e/smoke.mjs` |
 
 ---
 
@@ -57,11 +57,11 @@ Cada linha corresponde a um arquivo que existe em `projects/limiar/src/`.
 | `camera-rig.ts` | Hierarquia root → head → câmeras; hFOV como fonte da verdade | `CameraRig`, `CameraRigOptions`, `HeadOffsets`, `createHeadOffsets`, `hfovToVfov` |
 | `events.ts` | EventBus tipado (`emit` síncrono, `queue`/`flush`) | `EventBus<E>` |
 | `entity.ts` | Id opaco, transform, base de entidade, armazém por `kind` | `EntityId`, `Transform`, `EntityBase`, `EntityStore`, `allocEntityId` |
-| `debug-stats.ts` | FPS/frame time (janela 1 s, média 3 s), `renderer.info`, `performance.mark` | `DebugStats`, `DebugStatsSnapshot` |
+| `debug-stats.ts` | FPS/frame time (janela 1 s; média longa de `longWindowSec` = `SHADOW_AUTO_OFF.windowSec`), `renderer.info`, `performance.mark` (limpo 1×/s) | `DebugStats`, `DebugStatsOptions`, `DebugStatsSnapshot` |
 | `storage.ts` | Persistência versionada com migrations e validação | `SaveStore<T>`, `StorageLike`, `Migration`, `SaveEnvelope` |
 | `url-flags.ts` | `?nolock ?shadows ?debug ?scale ?seed ?hud` | `UrlFlags`, `parseUrlFlags`, `readUrlFlags` |
 | `math/index.ts` | Utilidades sem alocação; raio × cápsula analítico | `clamp`, `lerp`, `damp`, `moveTowards`, `moveTowardsVec2XZ`, `deg`, `rad`, `snapToGrid`, `RayContact`, `rayCapsule` |
-| `math/spring.ts` | Mola amortecida semi-implícita com sub-passos | `Spring` |
+| `math/spring.ts` | Mola amortecida com solução fechada (exata para qualquer dt); `kickToPeak`/`peakFactor` | `Spring` |
 | `math/random.ts` | RNG determinístico (mulberry32) | `Random` |
 | `physics/layers.ts` | Bitmask de colisão | `CollisionLayer`, `CollisionMask` |
 | `physics/movement-config.ts` | **Tipo** dos parâmetros de movimento (valores em `data/`) | `MovementConfig` |
@@ -73,7 +73,7 @@ Cada linha corresponde a um arquivo que existe em `projects/limiar/src/`.
 
 | Arquivo | Conteúdo |
 |---|---|
-| `index.ts` | `DEFS = { elements, factions, levels }`, `DefRegistry`, `LEVELS`, `LevelId`, `DefinitionError`, `validateDefs`, `countDefs` |
+| `index.ts` | `DEFS = { elements, factions, levels }`, `DefRegistry`, `LEVELS`, `DefinitionError`, `validateDefs`, `countDefs` |
 | `palette.ts` | `PALETTE` (ocre, terracota, névoa lilás, ciano-vigia, magenta-maré, elementos, facções, raridades, props) |
 | `elements.ts` | `ELEMENTS`: Brasa (`ember`), Ressonância (`resonance`), Névoa (`haze`) |
 | `factions.ts` | `FACTIONS`: Axioma (`axiom`), Ferrugem (`rust`), Cepa (`strain`) com unidades previstas |
@@ -111,7 +111,7 @@ Cada linha corresponde a um arquivo que existe em `projects/limiar/src/`.
 | `system.ts` | — | `interface System { name; init?; fixedUpdate?; frameUpdate?; dispose? }` |
 | `player-input.ts` | fixed #1 | `InputState` + `look.yaw` → `player.intent` |
 | `character-physics.ts` | fixed #2 | para toda entidade com `body`: `integrateCapsuleBody` + `resolveCapsuleCollision`; emite `player:jumped`/`player:landed` |
-| `kill-plane.ts` | fixed #3 | amostra `lastSafePosition` a cada 1 s de chão contínuo, com um estágio de atraso (`candidate`); `y < killPlaneY` → respawn; exporta `placePlayer`, `respawnPlayer` |
+| `kill-plane.ts` | fixed #3 | amostra `lastSafePosition` a cada 1 s de chão contínuo, com um estágio de atraso (`candidate`); `y < killPlaneY` → respawn; ouve `player:respawned` para reiniciar a amostra (P, T, `__limiar.respawn`); exporta `respawnPlayer`, `teleportPlayer` |
 | `locomotion-state.ts` | fixed #4 | `idle/walk/sprint/air` + `player:locomotionChanged` |
 | `player-look.ts` | frame #1 | mouse → `look.yaw/pitch`; `transform.yaw = look.yaw` |
 | `camera-feel.ts` | frame #2 | molas de kick de pouso e recoil, FOV dinâmico, head-bob → `world.headOffsets` |
@@ -217,7 +217,7 @@ flowchart TD
 
 Pontos que o diagrama não mostra:
 
-- Com o loop **pausado** (`ready`, `paused`, `error`) não há passos fixos, mas `frameUpdate` e `render` continuam com `alpha = 1`: a cena fica parada atrás do overlay e o resize funciona.
+- Com o loop **pausado** (`ready`, `paused`, `error`) não há passos fixos, mas `frameUpdate` e `render` continuam com `alpha = 1`: a cena fica parada atrás do overlay e o resize funciona. Nesse estado o `frameUpdate` chama `handleDisplayKeys()` (F3/F7/F8, só apresentação/settings) e `input.endFixedStep()`, para essas bordas não ficarem presas; F4/F6/F9/P/T/Esc continuam só em `running`.
 - `resume()` zera acumulador e relógio: o tempo passado em pausa não é integrado.
 - `readRenderer` no `frameUpdate` lê os contadores do **frame anterior** (o `Renderer` chama `info.reset()` só no início de `renderFrame`).
 - A ordem relativa de `systems-list.ts` vale para as duas fases: o loop percorre a lista inteira e chama só o método que cada sistema define.
@@ -364,11 +364,11 @@ Os offsets são **recalculados do zero a cada frame**; cada contribuição decai
 
 | Contribuição | Mecanismo | Valores |
 |---|---|---|
-| Kick de pouso | `player:landed { fallSpeed }` → `amp = clamp(fallSpeed / 20, 0, 1)`; molas `landPitch`, `landY` recebem `kick(−amp · x · ω)` | `pitchDeg 2.5`, `posY 0.06`, `zeta 0.6`, `omega 22` |
-| Slot de recoil | `camera:kick { pitchDeg, yawDeg, posBack }` desloca `recoilOffsetPitch/Yaw` (alvo das molas); `recoveryDegPerSec` traz o alvo a zero; `recoilBack.kick(posBack · ω)` | `zeta 0.55`, `omega 26`, `recoveryDegPerSec 18`, F9: `{ 1.2°, ±0.3°, 0.02 m }` |
+| Kick de pouso | `player:landed { fallSpeed }` → `amp = clamp(fallSpeed / 20, 0, 1)`; molas `landPitch`, `landY` recebem `kickToPeak(−amp · x)` (impulso calibrado para o pico anunciado) | `pitchDeg 2.5`, `posY 0.06`, `zeta 0.6`, `omega 22` |
+| Slot de recoil | `camera:kick { pitchDeg, yawDeg, posBack }` desloca `recoilOffsetPitch/Yaw` (alvo das molas); `recoveryDegPerSec` traz o alvo a zero; `recoilBack.kickToPeak(posBack)` | `zeta 0.55`, `omega 26`, `recoveryDegPerSec 18`, F9: `{ 1.2°, ±0.3°, 0.02 m }` |
 | Head-bob | amplitude escala com `speed/walkSpeed`, zero no ar, `damp` de 10 | **desligado** por padrão (`enabled: false`), `ampY 0.018`, `ampX 0.01`, `rollDeg 0.25`, `hz 1.9` |
 
-`Spring.step(dt)` sub-divide `dt` para manter `ω·h ≤ 0,5` — sem isso um frame de 0,1 s com ω = 26 divergia para NaN e a câmera sumia (bug real corrigido no M0; teste em `tests/core/spring.test.ts`).
+`Spring.step(dt)` aplica a solução fechada do oscilador amortecido (sub/crítico/super-amortecido): não diverge com dt grande (um frame de 0,1 s com ω = 26 explodia para NaN no Euler semi-implícito original) e o pico do kick não depende do frame rate (com Euler a 60 Hz o pico saía ~40 % menor que a 144 Hz). `kickToPeak(peak)` calibra o impulso pelo `peakFactor(ζ)` — a resposta ao impulso `kick(peak · ω)` atinge só ≈ 0,50 · peak em ζ = 0,6. Testes em `tests/core/spring.test.ts`.
 
 ---
 
@@ -380,13 +380,13 @@ Os offsets são **recalculados do zero a cada frame**; cada contribuição decai
 |---|---|---|---|
 | `capsuleRadius` | 0,4 m | `jumpHeight` | 1,4 m |
 | `capsuleHeight` | 1,8 m | `jumpHoldGravityScale` | 0,5 |
-| `eyeHeight` | 1,62 m | `jumpHoldMaxTime` | 0,25 s |
+| `eyeHeight` | 1,62 m | `jumpHoldDeadTime` / `jumpHoldMaxTime` | 0,08 s / 0,25 s |
 | `walkSpeed` | 6,0 m/s | `maxFallSpeed` | −40 m/s |
 | `sprintSpeed` | 8,5 m/s | `coyoteTime` | 0,1 s |
 | `groundAccel` / `groundDecel` | 60 / 80 m/s² | `jumpBufferTime` | 0,1 s |
 | `airAccel` / `airMaxSpeed` | 12 m/s² / 6,0 m/s | `slopeLimitDeg` | 46° |
 | `gravity` | −24 m/s² | `stepHeight` | 0,35 m |
-| | | `groundSnapDistance` | 0,2 m |
+| | | `groundSnapDistance` | 0,4 m |
 
 Constantes derivadas no mesmo arquivo: `LOCOMOTION.idleSpeed = 0.1` m/s e `RESPAWN.safeGroundedSeconds = 1`. `SPRINT_MIN_FORWARD = 0.5` (em `core/physics/capsule-body.ts`) é o mesmo critério de sprint usado pela integração e por `locomotion-state`.
 
@@ -400,7 +400,7 @@ export function integrateCapsuleBody(
 export function jumpSpeedFor(cfg: MovementConfig, dt: number): number; // √(2·|g|·h) + |g|·dt/2
 ```
 
-Passos: timers (coyote, jump buffer) → horizontal (`moveTowardsVec2XZ` com `groundAccel`/`groundDecel` no chão; `airAccel` até `airMaxSpeed` no ar, sem atrito aéreo sem input) → pulo (buffer + coyote; coyote não vale após já ter pulado) → vertical (gravidade reduzida enquanto segura o pulo, por até `jumpHoldMaxTime`; clamp em `maxFallSpeed`) → `prevPosition = position; position += vel·dt`. Convenção: yaw 0 → −Z, `right = +X`. Testado em `tests/physics/integrate.test.ts`.
+Passos: timers (coyote, jump buffer) → horizontal (`moveTowardsVec2XZ` com `groundAccel`/`groundDecel` no chão; no ar, *air-accelerate*: soma `airAccel·dt` só ao longo do `wish` até `min(speed, airMaxSpeed)`, nunca reduz o módulo existente — um sprint-jump segurando W mantém 8,5 m/s; frear é só empurrando contra a velocidade — e um clamp em `max(|vel| anterior, airMaxSpeed)` impede ganhar velocidade por strafe; sem atrito aéreo sem input) → pulo (buffer + coyote; coyote não vale após já ter pulado) → vertical (gravidade reduzida enquanto segura o pulo, depois de uma zona morta de `jumpHoldDeadTime` — o keydown que salta já chega com `jumpHeld` — e por até `jumpHoldMaxTime`; clamp em `maxFallSpeed`) → `prevPosition = position; position += vel·dt`. Convenção: yaw 0 → −Z, `right = +X`. Testado em `tests/physics/integrate.test.ts`.
 
 ### 9.3 Resolução de colisão (`core/physics/collision-resolve.ts`)
 
@@ -418,7 +418,7 @@ Algoritmo por passo (constantes locais: `MAX_ITERATIONS = 5`, `PUSH_EPSILON = 1e
    - `normal.y ≥ cos(46°)` → chão: `grounded`, `groundNormal`, `vel.y = max(vel.y, 0)`.
    - Senão, se `wasGrounded && stepHeight > 0`: **tenta step-up primeiro** (`tryStepUp`); se falhar, `slide`.
 3. `position = capsule.start − (0, r, 0)`.
-4. **Snap ao chão** se `wasGrounded && !grounded && vel.y ≤ 0`: raio para baixo do centro dos pés e, se falhar e houver velocidade horizontal, um segundo raio na borda dianteira (`centro + r · dir(vel)`), alcance `groundSnapDistance + 0,05`.
+4. **Snap ao chão** se `wasGrounded && !grounded && vel.y ≤ 0`: raio para baixo do centro dos pés e, se falhar e houver velocidade horizontal, um segundo raio na borda dianteira (`centro + r · dir(vel)`), alcance `groundSnapDistance + 0,05` (0,40 + 0,05 m: cobre a queda por passo na rampa-limite em sprint mais um degrau descido, sem grudar ao sair de um caixote de 1 m). A posição resultante deixa a esfera de baixo **tangente** ao plano: `pos.y = hit.point.y + r · (1 / hit.normal.y − 1)` — pés no ponto penetravam `r·(1 − cos θ)` e o push-out seguinte devolvia `r·(1/cos θ − 1)`: serrote de 12 cm a 40°.
 5. `grounded` → `timeSinceGrounded = 0; airborneByJump = false`. `out.landed = !wasGrounded && grounded`; `out.fallSpeed = max(0, −vel.y antes do passo)`.
 
 Detalhes que diferem do pseudocódigo do design (motivos verificados em teste; ver §19):
@@ -474,7 +474,7 @@ export class Renderer {
   readonly gl: THREE.WebGLRenderer;
   onResize: ((cssWidth: number, cssHeight: number, aspect: number) => void) | null;
   constructor(canvas: HTMLCanvasElement, container: HTMLElement, cfg: RenderConfig);
-  get cssWidth / cssHeight / aspect / renderScale / shadowsEnabled;
+  get cssWidth / cssHeight / aspect / renderScale;
   setRenderScale(scale: number): void;
   applyConfig(cfg: RenderConfig, scene?: THREE.Scene): void;  // passe scene ao ligar/desligar sombras (materiais recompilam)
   renderFrame(scene: THREE.Scene, rig: CameraRig): void;
@@ -498,7 +498,7 @@ Duas passadas ([ADR 0006](./decisoes/0006-viewmodel-duas-cameras.md)): `autoClea
 
 **Sombra segue o jogador** (`updateShadowFollow(lighting, playerPos, forward, cfg)`, chamado por `camera-sync`): alvo = pé + `forward · 8 m`, levado ao espaço da luz por `lightBasisInverse` (rotação pura calculada em `applyLightingConfig`), arredondado à grade de texels (`60 / 2048 ≈ 0,029 m`) e devolvido ao mundo. Elimina o shimmer ao andar.
 
-**Auto-desligar sombras** (`systems/debug-stats-system.ts`, `SHADOW_AUTO_OFF = { frameAvgMs: 20, windowSec: 3, graceSec: 6 }`): só em `running`, só após 6 s de frame (compilação de shaders), uma única vez; não altera `settings.shadows`; emite `config:changed { path: 'render.shadows' }` e `render:shadowsChanged { enabled: false, auto: true }`; o HUD mostra "sombras AUTO-OFF (F7 religa)". Sem pós-processamento ([ADR 0004](./decisoes/0004-sem-pos-processamento.md)).
+**Auto-desligar sombras** (`systems/debug-stats-system.ts`, `SHADOW_AUTO_OFF = { frameAvgMs: 20, windowSec: 3, graceSec: 6 }`): só em `running`, só após `graceSec` (6 s) **com sombras ligadas** — contado desde que foram ligadas (início da sessão, F7, painel ou HMR: todos passam por `cfg.render.shadows`), para que a média de 3 s medida sem sombras não condene as sombras recém-ligadas —, uma única vez; não altera `settings.shadows`; emite `config:changed { path: 'render.shadows' }` e `render:shadowsChanged { enabled: false, auto: true }`; o HUD mostra "sombras AUTO-OFF (F7 religa)". Sem pós-processamento ([ADR 0004](./decisoes/0004-sem-pos-processamento.md)).
 
 ---
 
@@ -709,7 +709,7 @@ __limiar.world.time.sim;                             // tempo simulado (espera d
 
 HUD de debug (F3, `settings.debugHud`, ligado por padrão em DEV): `<pre>` atualizado 4×/s com FPS/avg/max, passos e drops do loop, `renderer.info` (draw/tris/geom/tex/prog), dpr/escala/resolução, sombras (inclusive "AUTO-OFF"), posição/velocidade/estado de locomoção/normal do chão/coyote, look/hfov/vfov/sensibilidade, lock (`LOCKED/UNLOCKED/NOLOCK/TUNING`), entidades, `countDefs(DEFS)`, seed e a legenda dos atalhos.
 
-Atalhos (lidos em `Game.handleDebugKeys`, por borda no passo fixo): **F3** HUD · **F4** painel/modo de tuning (DEV) · **F6** helpers (grades, eixos, Octree mesclado, cápsula wireframe — camada DEBUG; criados na primeira vez) · **F7** sombras (persiste) · **F8** render scale 1,0 ↔ 0,75 (persiste) · **F9** kick de recoil (yaw com sinal do `rng`) · **P** respawn no spawn · **T** teleporte ao topo da torre (P/T só com `world.debug`) · **Esc** pausa no modo sem lock.
+Atalhos (lidos em `Game.handleDebugKeys`, por borda no passo fixo; F3/F7/F8 saem de `handleDisplayKeys`, chamado também no `frameUpdate` com o loop pausado): **F3** HUD · **F4** painel/modo de tuning (DEV) · **F6** helpers (grades, eixos, Octree mesclado, cápsula wireframe — camada DEBUG; criados na primeira vez) · **F7** sombras (persiste) · **F8** render scale 1,0 ↔ 0,75 (persiste) · **F9** kick de recoil (yaw com sinal do `rng`) · **P** respawn no spawn · **T** teleporte ao topo da torre (P/T só com `world.debug`) · **Esc** pausa no modo sem lock.
 
 Flags de URL: `?nolock=1` · `?shadows=0|1` · `?scale=0.25–1` · `?hud=0|1` · `?debug=1` · `?seed=N`.
 
@@ -722,7 +722,7 @@ cd projects/limiar
 npm install              # uma vez
 npm run dev              # http://127.0.0.1:5173 (HUD ligado, F4 painel, P/T ativos, validateDefs roda)
 npm run typecheck        # tsc src/tests + tsconfig.node.json (e2e com checkJs)
-npm test                 # vitest: 11 suítes, 140 testes
+npm test                 # vitest: 11 suítes, 150 testes
 npm run build && npm run preview   # http://127.0.0.1:4173
 npm run test:e2e         # node e2e/smoke.mjs
 npm run check            # typecheck + test + build + e2e (~1 min)
@@ -809,9 +809,9 @@ Todas registradas pelos implementadores com motivo verificado. O código é o qu
 | 3 | §3.3 | comentário "lido por `player-physics`" | o sistema chama-se `character-physics` | nome da árvore §10.1 |
 | 4 | §3.4 | `EventBus<E extends Record<string, object>>` | `EventBus<E extends { [K in keyof E]: object }>`; emit aninhado até 16 níveis; flush até 64 passadas | `GameEvents` é uma interface sem index signature; limites evitam travar em recursão |
 | 5 | §3.5 | HMR por `import.meta.hot.accept((mod) => Object.assign(MOVEMENT, mod.MOVEMENT))` em cada módulo de config; `render-config.ts` chama `applyRenderConfig` via `config:changed` | `keepLive(import.meta.hot, key, fresh, assign)` em `data/hot-config.ts` (objeto vivo em `import.meta.hot.data`) + `import.meta.hot.accept()` literal; `render-config` também se auto-aceita e `game.ts` ouve `onConfigHotUpdate` para reaplicar renderer/luzes preservando as settings | o padrão do design **só aplicava a 1ª edição** (callback da versão antiga descartado pelo Vite; verificado com `vite dev` + Chromium); e o accept de dependência em `game.ts` nunca disparava porque `render-config` tem outros importadores → page reload a cada edição |
-| 6 | §3.6 | `Spring` estável para ω·dt ≤ 0,5 | `step(dt)` sub-divide internamente para garantir ω·h ≤ 0,5 | frame de 0,1 s com ω = 26 divergia para NaN e a cena sumia (bug reproduzido em SwiftShader; teste adicionado) |
+| 6 | §3.6 | `Spring` semi-implícita, estável para ω·dt ≤ 0,5 | `step(dt)` usa a solução fechada do oscilador (exata para qualquer dt); `kickToPeak(peak)` + `static peakFactor(ζ)` | frame de 0,1 s com ω = 26 divergia para NaN no Euler (bug reproduzido em SwiftShader); o pico do kick ficava 40 % menor a 60 Hz que a 144 Hz; `kick(peak·ω)` dava metade do pico anunciado |
 | 7 | §3.6 | `rayCapsule(origin, dir, capsule, out)`; `SaveStore.validate` implícito | `rayCapsule(origin, dir, capsule, maxDist, out)`; `validate: (p) => p is T` **obrigatório**; `migrations.length === version − 1` verificado | `maxDist` poda antes de calcular a normal; validação obrigatória evita carregar lixo |
-| 8 | §4.3 | `InputState` é uma interface | classe concreta com API crua `onKeyCode/onMouseButton/onMouseMove/onWheel` + `attach/detach`; `blur` → `reset()` | testável em Node sem `KeyboardEvent`; keyup perdido ao trocar de janela |
+| 8 | §4.3 | `InputState` é uma interface | classe concreta com API crua `onKeyCode/onMouseButton/onMouseMove/onWheel` + `attach/detach`; `blur` → `reset()`; o `keydown` ignora teclas com modificador (Ctrl/Meta/Alt) e alvos editáveis (`isEditableTarget`: INPUT/TEXTAREA/SELECT/contentEditable) — nem `preventDefault` nem `onKeyCode`; o `keyup` sempre solta a tecla | testável em Node sem `KeyboardEvent`; keyup perdido ao trocar de janela; Ctrl+F/S/R/P são do navegador e o painel F4 usa `<input>` (W/E eram engolidos) |
 | 9 | §4.4 | `pointerlockerror` → mensagem + contador **e** também "falha → modo unlocked" | 1ª falha consecutiva → `'cooldown'` (1 200 ms); 2ª → `'unlocked'` | as duas regras do design conflitavam; assim o cooldown do Chromium não derruba o lock, e iframes/políticas caem para o fallback |
 | 10 | §4.2 kill-plane | "respawn em `lastSafePosition`" (atualizada quando grounded há > 1 s) | amostra a cada `RESPAWN.safeGroundedSeconds = 1` s de chão contínuo **com um estágio de atraso**: a amostra nova vira `candidate` e a anterior é promovida a `lastSafePosition`; respawn de debug (P) vai ao spawn do nível e zera o look | sem o atraso a amostra podia cair a 22 cm da beirada (medido) e o respawn devolvia o jogador ao buraco; com ele o ponto seguro tem sempre ≥ 1 s de chão entre ele e a queda (respawn medido a 9 m do buraco) |
 | 11 | §5.2 | `const enum CollisionLayer`; `RayHit.entity?: EntityId`; `CapsuleHit/RayHit/Hitbox` em `world/` | objeto `as const` + `CollisionMask = number`; `entity: EntityId \| null`; `CapsuleHit/RayHit/CollisionQuery` em `core/physics/collision-query.ts` (`Hitbox` fica em `world/`) | `isolatedModules/verbatimModuleSyntax` proíbem `const enum`; `World \| Enemy` não cabe na união de literais; `exactOptionalPropertyTypes` proíbe zerar um opcional com `undefined`; `core/` não pode importar `world/` |
@@ -821,7 +821,7 @@ Todas registradas pelos implementadores com motivo verificado. O código é o qu
 | 15 | §5.2 snap | um raio do centro dos pés | segundo raio na borda dianteira quando o primeiro falha | no passo seguinte a um step-up o centro ainda está sobre o piso de baixo (trepidação) |
 | 16 | §5.3/§5.4 | `HeadOffsets { pitch, yaw, roll, y, back }`; hfov só no `world` | `HeadOffsets` ganha `x` (bob lateral); `CameraRig.hfovDeg` guarda o último aplicado; `camera-feel` só chama `setHfov` se FOV ou aspect mudaram (> 0,01°) | resize sem frame esticado; sem `updateProjectionMatrix` por frame |
 | 17 | §5.4 | `CameraConfig` não tem lugar definido | tipo em `data/camera-config.ts`, com `near/far/viewmodelNear/viewmodelFar/landFovKickDeg/landFovKickTime` | `core/` não tem esse tipo; valores do §5.4 precisavam de casa |
-| 18 | §5.5 | `landKickPitch.kick(amp · 2,5° · ω)` (positivo) | `kick(−amp · rad(2,5) · ω)` e `landY.kick(−amp · 0,06 · ω)` | `rotation.x` negativo = olhar para baixo; a cabeça afunda |
+| 18 | §5.5 | `landKickPitch.kick(amp · 2,5° · ω)` (positivo) | `landPitch.kickToPeak(−amp · rad(2,5))` e `landY.kickToPeak(−amp · 0,06)` (`recoilBack.kickToPeak(posBack)`) | `rotation.x` negativo = olhar para baixo; a cabeça afunda; `kick(x·ω)` atinge só `peakFactor(0,6) ≈ 0,50 · x` — os 2,5° / 6 cm do config passam a ser o pico real |
 | 19 | §6 | funções soltas `createRenderer/applyRenderConfig/renderFrame`; `RenderConfig` sem luzes | classe `Renderer` (`applyConfig/renderFrame/setRenderScale`) + `createRenderer`/`hasWebGL2`; `RenderConfig` inclui `fogDensity`, `lights`, `shadow`; `info.autoReset = false` | estado de resize/escala pertence ao renderer; luzes, painel e HMR leem do mesmo objeto; as 2 passadas zerariam os contadores entre si |
 | 20 | §6.2 | snap via `shadow.camera.matrixWorldInverse` | `Lighting.lightBasis/lightBasisInverse` (rotação pura, recalculada em `applyLightingConfig`); `updateShadowFollow(lighting, playerPos, forward, cfg)` | a direção do sol é constante; a matriz da câmera de sombra se move com o alvo |
 | 21 | §6.4 | auto-desligar quando média de 3 s > 20 ms | idem, mas só após `graceSec = 6` s, só em `running`, sem tocar `settings.shadows` | os primeiros frames incluem compilação de shaders; a escolha do usuário é preservada |
@@ -832,6 +832,8 @@ Todas registradas pelos implementadores com motivo verificado. O código é o qu
 | 26 | §10.2 | `docs/limiar/{README.md, design.md, roadmap.md, performance.md}` | `README.md`, `01-visao-e-design.md`, `02-design-tecnico.md`, `03-arquitetura.md` (este), `04-roadmap.md`, `05-performance.md`, `06-guia-de-desenvolvimento.md`, `decisoes/` | numeração para leitura em ordem |
 | 27 | §3.3 | `CapsuleBody.layer/mask: CollisionLayer` | `CollisionMask` | ver #11 |
 | 28 | §3.1 | `ofKind` + type guards | igual, mais `ENTITY_KINDS` exportado | iteração sem alocar iterador de `Map` por frame |
+| 29 | §6.1/§7 | chão 'recebe sombra' (só `receiveShadow`) | as lajes do chão entram nos chunks mesclados com `castShadow = true` | separar o chão dobraria as meshes/draw calls do mundo; custo medido irrelevante (12 triângulos por laje; 8 draw calls com sombras) |
+| 30 | §5.1/§5.2 | `groundSnapDistance` 0,20 m; snap com `pos.y = hit.point.y` | **0,40 m**; `pos.y = hit.point.y + r · (1 / hit.normal.y − 1)` (esfera tangente ao plano) | com 0,20 m descer a rampa de 40° lançava o jogador no ar (36/150 passos, pouso a 10 m/s) e descer a escada de 0,25 m dava 4 quedas + 4 kicks; pés no ponto geravam serrote de 12 cm (penetração `r·(1−cos θ)` + push-out); 0,40 ainda não gruda ao sair de um caixote de 1 m (testes no Campo de Provas) |
 
 Questões em aberto (não são divergências, mas convém saber):
 
@@ -842,7 +844,7 @@ Questões em aberto (não são divergências, mas convém saber):
 - Controle aéreo conforme §5.1 (converge a `airMaxSpeed = 6` a 12 m/s²): um sprint-jump perde momentum em ~0,2 s. É o que o design especifica; possível ponto de tuning.
 - Subir rampa reduz a velocidade horizontal (≈ 5,25 m/s na rampa de 20,6° em vez de 6): o push-out do Octree tem componente horizontal. Feel aceitável; se incomodar, projetar a velocidade no plano do chão quando `grounded`.
 - Pousar sobre uma aresta (ex.: caixote) pode deixar a cápsula "pendurada" com os pés até 5 cm abaixo do topo (`normal.y ≈ 0,87 ≥ cos 46°` → `grounded`). Comportamento clássico de cápsula; não trepida.
-- Atalhos de debug (F3/F6/F7…) são lidos no passo fixo: não respondem enquanto o jogo está pausado (o loop não roda passos fixos em pausa).
+- Atalhos de debug que mexem na simulação/cena (F4/F6/F9/P/T) são lidos no passo fixo e não respondem com o jogo pausado; F3/F7/F8 (`handleDisplayKeys`) funcionam também em `ready`/`paused`, porque o `frameUpdate` os lê quando o loop está pausado.
 
 ---
 

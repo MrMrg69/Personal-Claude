@@ -31,7 +31,7 @@ Cerca de 10 s, ~50 pacotes. O `package-lock.json` está versionado: em CI use `n
 Lista de verificação pós-instalação:
 
 - [ ] `npm run typecheck` sem erros.
-- [ ] `npm test` verde (11 suítes, 140 testes).
+- [ ] `npm test` verde (11 suítes, 150 testes).
 - [ ] `npm run dev` abre `http://127.0.0.1:5173` e o overlay "LIMIAR" aparece.
 
 ## 3. Scripts npm
@@ -41,7 +41,7 @@ Todos confirmados rodando neste repositório (última passada: `npm run check` v
 | Script | Comando real | O que faz | Quando usar |
 |---|---|---|---|
 | `npm run dev` | `vite --host 127.0.0.1 --port 5173` | Servidor de desenvolvimento com HMR. HUD de debug ligado por padrão, painel `F4` disponível, `validateDefs(DEFS)` roda ao montar. | Desenvolvimento diário. |
-| `npm run build` | `vite build` | Gera `dist/`. O `three` sai em chunk próprio (`build.rolldownOptions.output.codeSplitting`). Resultado atual: índice ≈ 57 kB (20,8 kB gz) + three ≈ 539 kB (135 kB gz) + CSS 2,5 kB, sem avisos. | Antes de medir performance real. |
+| `npm run build` | `vite build` | Gera `dist/`. O `three` sai em chunk próprio (`build.rolldownOptions.output.codeSplitting`). Resultado atual: índice ≈ 59 kB (21,4 kB gz) + three ≈ 539 kB (135 kB gz) + CSS 2,6 kB, sem avisos. | Antes de medir performance real. |
 | `npm run preview` | `vite preview --host 127.0.0.1 --port 4173 --strictPort` | Serve `dist/`. | Testar o build de produção. |
 | `npm run typecheck` | `tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json` | Dois projetos: `src/` + `tests/` e os arquivos de Node (`vite.config.ts`, `vitest.config.ts`, `e2e/smoke.mjs` com `checkJs`). | Sempre antes de considerar algo pronto. |
 | `npm test` | `vitest run` | Testes unitários em Node (sem DOM nem WebGL). | A cada mudança em `core/`, `data/`, `world/`. |
@@ -61,7 +61,7 @@ Fonte: `src/data/input-bindings.ts` (`INPUT_BINDINGS`). Os mapeamentos são por 
 |---|---|---|
 | `W A S D`, `↑` | `forward`/`back`/`left`/`right` | ativo |
 | `Shift esq.` | `sprint` — só vale empurrando para a frente (`dir.y > 0,5`) | ativo |
-| `Espaço` | `jump` — segurar sobe mais (≈ 1,4 m no toque, ≈ 2,2 m segurando) | ativo |
+| `Espaço` | `jump` — segurar sobe mais (≈ 1,4 m no toque, ≈ 2,1 m segurando) | ativo |
 | mouse | olhar: 0,022 °/contagem × multiplicador 1,5, sem suavização | ativo |
 | `Esc` | `pause` — no modo sem pointer lock pausa direto; com lock, o próprio navegador solta o mouse e o jogo pausa | ativo |
 | `Ctrl esq.`, `C` | `crouch` | mapeado, sem sistema |
@@ -73,13 +73,13 @@ Clique no overlay para começar. O jogo pede pointer lock; se o navegador recusa
 
 ### 4.2 Atalhos de debug
 
-Fonte: `src/data/input-bindings.ts` (teclas) e `Game.handleDebugKeys` em `src/game/game.ts` (comportamento). São lidos no **passo fixo**, na borda de pressionar — por isso não respondem enquanto o jogo está pausado.
+Fonte: `src/data/input-bindings.ts` (teclas) e `Game.handleDebugKeys` em `src/game/game.ts` (comportamento). São lidos na borda de pressionar. `F3`/`F7`/`F8` (`handleDisplayKeys`, só apresentação/settings) funcionam também com o jogo pausado (`ready`/`paused`); os demais são lidos no **passo fixo** e só respondem em `running`.
 
 | Tecla | Faz | Persiste? |
 |---|---|---|
 | `F3` | liga/desliga o HUD de debug | sim (`settings.debugHud`) |
 | `F4` | painel de tuning (lil-gui). Entra no **modo de tuning**: mouse livre, simulação continua rodando. `F4` de novo ou clique no canvas volta e pede o lock. **Só em `npm run dev`.** | não |
-| `F6` | helpers na camada DEBUG: grade 1 m/10 m, eixos, nós do Octree (um único `LineSegments`), cápsula do jogador em wireframe. Custa ≈ +4 draw calls. | não |
+| `F6` | helpers na camada DEBUG: grade 1 m/10 m, eixos, nós do Octree (um único `LineSegments`), cápsula do jogador em wireframe. Custa +5 draw calls (grade 1 m, grade 10 m, eixos, Octree, cápsula). | não |
 | `F7` | sombras liga/desliga (também religa depois do desligamento automático) | sim (`settings.shadows`) |
 | `F8` | render scale 1,0 ↔ 0,75 (`RENDER_SCALE_ALT`) | sim (`settings.renderScale`) |
 | `F9` | kick sintético de recoil (`FEEL.recoil.debugKick`; afina a mola antes de existir arma) | não |
@@ -113,7 +113,7 @@ http://127.0.0.1:5173/?nolock=1&shadows=0&debug=1&seed=1
 
 ### 6.1 HUD de debug (`F3`)
 
-Arquivo: `src/ui/debug-hud.ts`. Um `<pre>` atualizado a cada frame, seis linhas:
+Arquivo: `src/ui/debug-hud.ts`. Um `<pre>` cujo texto é reformatado 4×/s (`update` é chamado a cada frame, o DOM só muda a `HUD_HZ`), seis linhas:
 
 1. `LIMIAR <tag> | FPS, frame médio (1 s) / máximo (1 s) / médio (3 s) | passos por frame, passos descartados (drop)`.
 2. `draw, tris, geom, tex, prog | dpr, scale, resolução | sombras ON / OFF / AUTO-OFF (F7 religa)`.
@@ -131,7 +131,7 @@ Arquivo: `src/ui/tuning-panel.ts`. Carrega `lil-gui` (`three/addons/libs/lil-gui
 | Pasta | Edita |
 |---|---|
 | `movement` | `MOVEMENT` (`src/data/movement-config.ts`): velocidades, acelerações, gravidade, pulo, coyote, step-up… |
-| `camera` | `CAMERA` (`src/data/camera-config.ts`): hFOV, sensibilidade, altura dos olhos… |
+| `camera` | `CAMERA` (`src/data/camera-config.ts`): FOV dinâmico de sprint, damp do FOV, kick de FOV no pouso, sensibilidade (°/contagem), clamp de pitch (hFOV e sensibilidade do usuário ficam em `settings`; altura dos olhos em `movement`) |
 | `feel` → `landKick`, `recoil`, `headBob` | `FEEL` (`src/data/feel-config.ts`); botão de kick de recoil (mesmo que `F9`) |
 | `render` → `lights`, `shadow` | `RENDER` (`src/data/render-config.ts`): exposição, névoa, sol, sombras |
 | `settings` | `Settings` do usuário (sensibilidade, hFOV, sombras, escala, HUD) — persistem |
@@ -185,7 +185,7 @@ __limiar.world.time.sim;
 ### 7.1 Testes unitários (vitest)
 
 ```sh
-npm test              # uma passada (11 suítes, 140 testes)
+npm test              # uma passada (11 suítes, 150 testes)
 npm run test:watch    # modo watch
 npx vitest run tests/physics/collision.test.ts -t rampa   # um arquivo / um nome
 ```
@@ -197,7 +197,7 @@ Rodam em Node, sem DOM nem WebGL. Config em `vitest.config.ts` (alias `@/` → `
 | `tests/core/loop.test.ts` | timestep fixo, clamp de frame, passos descartados |
 | `tests/core/input.test.ts` | bordas por passo, eixo de movimento, `inject`, `reset` |
 | `tests/core/events.test.ts` | `EventBus`: on/once/emit/queue/flush |
-| `tests/core/spring.test.ts` | mola amortecida, inclusive frames longos (sub-passos) |
+| `tests/core/spring.test.ts` | mola amortecida com solução fechada: frames longos sem divergir, 1 × 0,5 s ≡ 30 × 1/60 s, `kickToPeak` atinge o pico pedido |
 | `tests/core/random.test.ts` | `Random` determinístico (mulberry32) |
 | `tests/core/storage.test.ts` | `SaveStore`: versão, migrações, `validate` |
 | `tests/physics/integrate.test.ts` | `integrateCapsuleBody` com os valores reais de `MOVEMENT` |
@@ -224,7 +224,7 @@ Arquivo: `e2e/smoke.mjs` (`playwright-core`, Chromium headless com SwiftShader).
 6. Asserta: zero `console.error`/`pageerror`/`requestfailed`; estado `running`; WebGL2; andou o mínimo para −Z e −X; virou 90° ± 5°; `grounded` no final; draw calls ≤ 30; fps > 5.
 7. Grava `e2e/artifacts/smoke-ready.png`, `smoke-walk.png`, `smoke-hud.png`, `smoke.png` e `smoke.json`. Mata o preview no `finally`. Sai com 1 em falha.
 
-Resultado da última passada neste repositório: `ok: true`, 4 draw calls, ~1,1 k triângulos, andou 5,85 m para −Z, virou 90,0°, andou 3,03 m para −X, `grounded`, zero erros. O FPS (~13, frame 78 ms) é do SwiftShader e não vale como medida.
+Resultado da última passada neste repositório (`e2e/artifacts/smoke.json`): `ok: true`, 4 draw calls, 1 128 triângulos, andou 5,85 m para −Z, virou 90,0°, andou 3,23 m para −X, `grounded`, zero erros. O FPS (~20, frame 50,8 ms) é do SwiftShader e não vale como medida.
 
 Variáveis de ambiente:
 
@@ -328,8 +328,8 @@ Onde está cada valor:
 
 | Quero mudar… | Arquivo | Objeto |
 |---|---|---|
-| velocidade, aceleração, pulo, gravidade, step-up, rampa limite, snap ao chão | `src/data/movement-config.ts` | `MOVEMENT` (+ `LOCOMOTION`, `RESPAWN`) |
-| hFOV, sensibilidade, altura dos olhos, FOV do viewmodel, near/far, kick de FOV no pouso | `src/data/camera-config.ts` | `CAMERA` |
+| velocidade, aceleração, pulo, gravidade, step-up, rampa limite, snap ao chão, altura dos olhos, cápsula | `src/data/movement-config.ts` | `MOVEMENT` (+ `LOCOMOTION`, `RESPAWN`) |
+| hFOV padrão, sensibilidade (°/contagem), FOV dinâmico de sprint, FOV do viewmodel, near/far, clamp de pitch, kick de FOV no pouso | `src/data/camera-config.ts` | `CAMERA` |
 | kick de pouso, molas de recoil (inclusive o kick de `F9`), head bob | `src/data/feel-config.ts` | `FEEL` |
 | exposição, névoa, sol, sombras, render scale alternativo, auto-off de sombras | `src/data/render-config.ts` | `RENDER`, `RENDER_SCALE_ALT`, `SHADOW_AUTO_OFF` |
 | padrões e faixas do usuário | `src/data/settings-defaults.ts` | `DEFAULT_SETTINGS`, `SETTINGS_RANGES` |
@@ -446,7 +446,7 @@ Crie `src/data/levels/<id>.ts` exportando um objeto `satisfies LevelDef`, regist
 | Editar uma config recarrega a página inteira | faltou o `import.meta.hot.accept()` literal no módulo (o Vite decide pelo fonte) |
 | `DefinitionError` ao abrir | o caminho no erro aponta o campo em `src/data/` |
 | Respawn logo depois de nascer | `killPlaneY` do nível ou spawn fora do chão; `src/systems/kill-plane.ts` |
-| Draw calls altos com `F6` | esperado ≈ +4; se muito mais, `collision.debugHelper()` em `src/world/collision-world.ts` |
+| Draw calls altos com `F6` | esperado +5; se muito mais, `collision.debugHelper()` em `src/world/collision-world.ts` |
 | Sombras somem sozinhas | auto-desligamento (`SHADOW_AUTO_OFF`: frame médio > 20 ms por 3 s após 6 s de carência); HUD mostra `AUTO-OFF`; `F7` religa |
 | FPS baixo sem GPU | normal em SwiftShader; ver [05-performance.md](05-performance.md) |
 | Teste de arquitetura falhou | import de valor entre pastas proibidas; use `import type` ou mova o código |

@@ -121,10 +121,6 @@ export class Renderer {
     return this.scale;
   }
 
-  get shadowsEnabled(): boolean {
-    return this.gl.shadowMap.enabled;
-  }
-
   setRenderScale(scale: number): void {
     if (scale === this.scale) return;
     this.scale = scale;

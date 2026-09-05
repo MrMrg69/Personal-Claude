@@ -42,6 +42,8 @@ export class PointerLockController {
   private cooldownUntil = 0;
   private consecutiveFailures = 0;
   private pending: ((r: LockRequestResult) => void) | null = null;
+  /** O pointerlockerror do 1º pedido (unadjustedMovement) ainda chega depois do 2º: não é falha. */
+  private ignoreNextError = false;
   private readonly doc: Document;
   private readonly supported: boolean;
 
@@ -103,6 +105,8 @@ export class PointerLockController {
     if (result instanceof Promise) {
       result.catch((err: unknown) => {
         if (withOptions && err instanceof DOMException && err.name === NOT_SUPPORTED_ERROR) {
+          // O evento pointerlockerror do 1º pedido ainda vai chegar (obsoleto): ignorar uma vez.
+          this.ignoreNextError = true;
           this.tryRequest(false);
         } else {
           this.fail();
@@ -133,6 +137,7 @@ export class PointerLockController {
   }
 
   private settle(r: LockRequestResult): void {
+    this.ignoreNextError = false;
     const resolve = this.pending;
     this.pending = null;
     if (resolve) resolve(r);
@@ -144,12 +149,17 @@ export class PointerLockController {
     this.isLocked = locked;
     if (locked) {
       this.consecutiveFailures = 0;
+      this.ignoreNextError = false;
       this.settle('locked');
     }
     this.cb.onChange(locked, this.currentMode);
   };
 
   private readonly handleError = (): void => {
+    if (this.ignoreNextError) {
+      this.ignoreNextError = false;
+      return;
+    }
     this.fail();
   };
 }

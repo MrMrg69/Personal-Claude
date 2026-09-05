@@ -10,8 +10,6 @@ export const LEVELS = {
   'test-ground': TEST_GROUND,
 } as const satisfies Readonly<Record<string, LevelDef>>;
 
-export type LevelId = keyof typeof LEVELS;
-
 /**
  * Registro de definições (design §3.5). Famílias novas (M1+: weapons, enemies,
  * items, lootTables, classes, abilities) entram aqui e em validateDefs.

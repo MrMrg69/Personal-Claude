@@ -19,13 +19,16 @@ export const MOVEMENT: MovementConfig = keepLive(import.meta.hot, 'movement', {
   gravity: -24,
   jumpHeight: 1.4,
   jumpHoldGravityScale: 0.5,
+  jumpHoldDeadTime: 0.08,
   jumpHoldMaxTime: 0.25,
   maxFallSpeed: -40,
   coyoteTime: 0.1,
   jumpBufferTime: 0.1,
   slopeLimitDeg: 46,
   stepHeight: 0.35,
-  groundSnapDistance: 0.2,
+  // m. ≥ stepHeight + queda por passo no limite de rampa em sprint (0,35 + 8,5/60·tan 46° ≈ 0,50
+  // seria o teto seguro; 0,40 cobre o Campo de Provas e ainda não gruda ao sair de um caixote de 1 m).
+  groundSnapDistance: 0.4,
 });
 
 /** Limiares derivados do movimento (locomotion-state, kill-plane). */

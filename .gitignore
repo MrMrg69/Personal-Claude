@@ -9,6 +9,8 @@
 **/test-results/
 **/playwright-report/
 **/e2e/__screenshots__/
+**/e2e/artifacts/
+!**/e2e/artifacts/.gitkeep
 
 # Sistema / editores
 .DS_Store

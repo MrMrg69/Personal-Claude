@@ -8,9 +8,10 @@ import type { System } from './system';
 /**
  * Coloca o jogador em (x, y, z) parado, no ar (o primeiro passo cola no chão
  * se houver). timeSinceGrounded = coyoteTime evita um pulo "grátis" ao chegar.
- * Usado por respawn, teleporte de debug e testes.
+ * Base de respawnPlayer e teleportPlayer (que também cuidam de lastSafePosition
+ * e do evento player:respawned).
  */
-export function placePlayer(world: World, x: number, y: number, z: number): void {
+function placePlayer(world: World, x: number, y: number, z: number): void {
   const p = world.player;
   const body = p.body;
   p.transform.position.set(x, y, z);
@@ -21,6 +22,17 @@ export function placePlayer(world: World, x: number, y: number, z: number): void
   body.jumpBufferTimer = 0;
   body.jumpHoldTimer = 0;
   body.airborneByJump = false;
+}
+
+/**
+ * Teleporte de debug (tecla T): tratado como respawn de debug para o ponto
+ * seguro — o destino vira lastSafePosition e o evento ressincroniza o
+ * kill-plane (senão a amostra antiga era promovida 1 s depois).
+ */
+export function teleportPlayer(world: World, x: number, y: number, z: number): void {
+  placePlayer(world, x, y, z);
+  world.player.lastSafePosition.set(x, y, z);
+  world.events.emit('player:respawned', { reason: 'debug' });
 }
 
 /**
@@ -56,6 +68,7 @@ export function respawnPlayer(world: World, reason: GameEvents['player:respawned
 export function createKillPlaneSystem(): System {
   let groundedTime = 0;
   const candidate = new THREE.Vector3();
+  let unsubscribe: (() => void) | null = null;
 
   return {
     name: 'kill-plane',
@@ -63,6 +76,11 @@ export function createKillPlaneSystem(): System {
       groundedTime = 0;
       world.player.lastSafePosition.copy(world.player.transform.position);
       candidate.copy(world.player.transform.position);
+      // Qualquer respawn/teleporte (killplane, P, T, __limiar.respawn) reinicia a amostra.
+      unsubscribe = world.events.on('player:respawned', () => {
+        candidate.copy(world.player.lastSafePosition);
+        groundedTime = 0;
+      });
     },
     fixedUpdate(world, dt) {
       const p = world.player;
@@ -77,11 +95,12 @@ export function createKillPlaneSystem(): System {
       } else {
         groundedTime = 0;
       }
-      if (p.transform.position.y < world.level.killPlaneY) {
-        respawnPlayer(world, 'killplane');
-        candidate.copy(p.lastSafePosition);
-        groundedTime = 0;
-      }
+      // O evento síncrono player:respawned ressincroniza candidate/groundedTime.
+      if (p.transform.position.y < world.level.killPlaneY) respawnPlayer(world, 'killplane');
+    },
+    dispose() {
+      unsubscribe?.();
+      unsubscribe = null;
     },
   };
 }

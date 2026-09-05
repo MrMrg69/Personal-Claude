@@ -2,7 +2,7 @@
 
 > Documento de design de jogo (GDD) do **LIMIAR**, protótipo de looter-shooter em primeira pessoa para navegador (Three.js + TypeScript + Vite). Inspiração declarada: a **estrutura de sistemas e a sensação de jogo** de Destiny 1 e 2. Nomes, mundo, facções e identidade visual são originais.
 >
-> Fontes: o master prompt do projeto e o [design técnico](./02-design-tecnico.md) (fonte da verdade para arquitetura, contratos e números). Onde este documento cita arquivos ou funções, usa os nomes **planejados** no design técnico (§10). No momento desta escrita o código em `projects/limiar/` ainda não existe; tudo aqui é **o planejado**, salvo indicação contrária.
+> Fontes: o master prompt do projeto e o [design técnico](./02-design-tecnico.md) (fonte da verdade para arquitetura, contratos e números). Onde este documento cita arquivos ou funções de M0, os nomes são os do código real em `projects/limiar/` (ver [03 — Arquitetura](./03-arquitetura.md)); o que é de M1 em diante usa os nomes **planejados** no design técnico (§10) e está marcado como tal.
 >
 > Estado: **M0 (esqueleto)**. Armas, inimigos, habilidades e loot descritos aqui são especificação para M1–M5 e além — não estão implementados.
 
@@ -52,7 +52,7 @@ Essa escolha estética é também a estratégia de performance: uma luz hemisfé
 
 ### 2.3 Paleta
 
-| Uso | Cor | Hex (planejado em `data/palette.ts`) |
+| Uso | Cor | Hex (`src/data/palette.ts`, `PALETTE`) |
 |---|---|---|
 | Chão | ocre / terracota | `#a67c52` |
 | Paredes e estruturas | cinza-quente | `#6b5f5a` |
@@ -142,7 +142,7 @@ Planejado para M2 (`systems/regen.ts`, `systems/damage.ts`):
 | Andar | 6,0 m/s |
 | Sprint (Shift, só para a frente) | 8,5 m/s |
 | Pulo de toque | 1,40 m |
-| Pulo segurando | ≈ 2,2 m (sem pulo duplo — isso é habilidade de classe) |
+| Pulo segurando | ≈ 2,1 m (sem pulo duplo — isso é habilidade de classe) |
 | Gravidade | −24 m/s² (descida "snappy") |
 | Degrau sem pulo | 0,35 m |
 | Cápsula | 0,40 m de raio × 1,80 m; olho a 1,62 m |
@@ -449,7 +449,7 @@ Primeiro mapa jogável. Zona aberta pequena (≈ 120 × 120 m) com terreno, cobe
 | Drop de loot ao abater, cor de raridade, stats aleatórios | M4 | [ ] |
 | Inventário simples (equipar, ver stats) | M4 | [ ] |
 | HUD: vida, escudo, munição, cooldowns, minimapa | M1–M5 | [ ] |
-| Esqueleto: render, câmera FPS (WASD + mouse), mundo de teste | **M0 (esta entrega)** | [ ] |
+| Esqueleto: render, câmera FPS (WASD + mouse), mundo de teste | **M0 (esta entrega)** | [x] |
 
 ### 15.2 Tabela de escopo
 
@@ -509,7 +509,7 @@ Nunca usar como nome de entidade, classe, facção, arquivo ou texto de jogo: Gu
 
 ---
 
-## Como rodar (planejado, M0)
+## Como rodar (M0)
 
 ```bash
 cd projects/limiar

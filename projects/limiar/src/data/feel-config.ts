@@ -3,9 +3,9 @@ import { keepLive } from './hot-config';
 /** Feel de câmera em M0 (design §5.5): kick de pouso, slot de recoil, head-bob desligado. */
 export interface FeelConfig {
   landKick: {
-    /** Pitch máximo do kick (graus), atingido com fallSpeed ≥ fallSpeedRef. */
+    /** Pico de pitch do kick (graus) com fallSpeed ≥ fallSpeedRef (impulso via Spring.kickToPeak). */
     pitchDeg: number;
-    /** Afundamento máximo da cabeça (m). */
+    /** Pico de afundamento da cabeça (m). */
     posY: number;
     /** m/s de queda que produz amplitude 1 (amp = clamp(fallSpeed / fallSpeedRef, 0, 1)). */
     fallSpeedRef: number;

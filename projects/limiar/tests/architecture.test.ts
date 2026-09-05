@@ -31,6 +31,14 @@ const TYPE_ONLY: Partial<Record<Folder, readonly Folder[]>> = {
 
 const FOLDERS: readonly Folder[] = ['core', 'data', 'entities', 'world', 'systems', 'ui', 'game'];
 
+/**
+ * `import()` dinâmicos permitidos fora das regras: design §8.2 — lil-gui só em
+ * DEV, carregado sob demanda e fora do bundle de produção.
+ */
+const DYNAMIC_ALLOW: Readonly<Record<string, readonly string[]>> = {
+  '/src/ui/tuning-panel.ts': ['three/addons/libs/lil-gui.module.min.js'],
+};
+
 function folderOfFile(file: string): Folder {
   const m = /^\/src\/([^/]+)\//.exec(file);
   const f = m?.[1];
@@ -57,7 +65,7 @@ function resolveTarget(file: string, spec: string): Folder | 'three' | null {
   return folderOfFile(`${path}/`);
 }
 
-/** Todos os `import ... from 'x'`, `import 'x'` e `export ... from 'x'`, marcando os type-only. */
+/** Todos os `import ... from 'x'`, `import 'x'`, `export ... from 'x'` e `import('x')`, marcando os type-only. */
 function importsOf(source: string): { spec: string; typeOnly: boolean }[] {
   const out: { spec: string; typeOnly: boolean }[] = [];
   const re = /(?:^|\n)\s*(import|export)\s+(type\s+)?([\s\S]*?)from\s*['"]([^'"]+)['"]|(?:^|\n)\s*import\s*['"]([^'"]+)['"]/g;
@@ -79,6 +87,11 @@ function importsOf(source: string): { spec: string; typeOnly: boolean }[] {
         .every((s) => s.startsWith('type '));
     out.push({ spec, typeOnly: m[2] !== undefined || allInlineType });
   }
+  // `import('x')` dinâmico é sempre de valor (o `typeof import('x')` em posição de tipo tem o mesmo texto,
+  // mas é inofensivo: a allow-list cobre o único caso legítimo).
+  for (const m of source.matchAll(/import\s*\(\s*['"]([^'"]+)['"]\s*\)/g)) {
+    out.push({ spec: m[1] ?? '', typeOnly: false });
+  }
   return out;
 }
 
@@ -95,6 +108,7 @@ describe('arquitetura: dependências entre pastas (§3.2)', () => {
     it(`${file} só importa o permitido para ${from}/`, () => {
       const violations: string[] = [];
       for (const { spec, typeOnly } of importsOf(source)) {
+        if (DYNAMIC_ALLOW[file]?.includes(spec)) continue;
         const target = resolveTarget(file, spec);
         if (target === null || target === 'root') continue;
         if (typeOnly) {

@@ -28,7 +28,9 @@ export interface MovementConfig {
   jumpHeight: number;
   /** Fator da gravidade enquanto o pulo é segurado (0–1). */
   jumpHoldGravityScale: number;
-  /** s. Tempo máximo em que segurar reduz a gravidade. */
+  /** s. Segurar o pulo só reduz a gravidade depois deste tempo: um toque humano solta a tecla em ≤ ~80 ms. */
+  jumpHoldDeadTime: number;
+  /** s. Tempo máximo (depois da zona morta) em que segurar reduz a gravidade. */
   jumpHoldMaxTime: number;
   /** m/s. Negativo (clamp). */
   maxFallSpeed: number;
@@ -40,6 +42,11 @@ export interface MovementConfig {
   slopeLimitDeg: number;
   /** m. Degrau máximo subido sem pulo (só quando grounded). */
   stepHeight: number;
-  /** m. Distância de snap ao chão ao descer rampas. */
+  /**
+   * m. Distância de snap ao chão ao descer rampas/degraus. Precisa cobrir a
+   * queda por passo no limite de rampa em sprint (≈ 0,15 m) somada à altura de
+   * um degrau descido (stepHeight), sem chegar a 1 m (sair de um caixote continua
+   * sendo queda). O snap coloca a esfera de baixo TANGENTE ao plano do chão.
+   */
   groundSnapDistance: number;
 }

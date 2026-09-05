@@ -15,7 +15,7 @@ export interface CapsuleBody {
   timeSinceGrounded: number;
   /** s; jump buffer. */
   jumpBufferTimer: number;
-  /** s com o pulo segurado desde o salto. */
+  /** s com o pulo segurado desde o salto (conta o tempo total; a zona morta é descontada no uso). */
   jumpHoldTimer: number;
   /** Evita "pulo duplo" via coyote depois de já ter pulado. */
   airborneByJump: boolean;
@@ -108,9 +108,27 @@ export function integrateCapsuleBody(
     const accel = hasInput ? cfg.groundAccel : cfg.groundDecel;
     moveTowardsVec2XZ(vel, wishX * speed, wishZ * speed, accel * dt);
   } else if (hasInput) {
-    // No ar sem input a velocidade horizontal não decai (sem atrito aéreo).
-    speed = Math.min(speed, cfg.airMaxSpeed);
-    moveTowardsVec2XZ(vel, wishX * speed, wishZ * speed, cfg.airAccel * dt);
+    // Air-accelerate com cap de módulo (sem input a velocidade horizontal não
+    // decai: sem atrito aéreo). Só soma ao longo do wish até o cap — nunca reduz
+    // o módulo existente (um sprint-jump segurando W mantém 8,5 m/s; frear é
+    // só empurrando CONTRA a velocidade) — e o clamp de módulo impede ganhar
+    // velocidade por strafe acima de airMaxSpeed. hasInput garante wishLen > 0.
+    const wishLen = Math.hypot(wishX, wishZ);
+    const ux = wishX / wishLen;
+    const uz = wishZ / wishLen;
+    const before = Math.hypot(vel.x, vel.z);
+    const cap = Math.min(speed, cfg.airMaxSpeed);
+    const along = vel.x * ux + vel.z * uz;
+    const add = Math.min(cfg.airAccel * dt, Math.max(0, cap - along));
+    vel.x += ux * add;
+    vel.z += uz * add;
+    const after = Math.hypot(vel.x, vel.z);
+    const limit = Math.max(before, cfg.airMaxSpeed);
+    if (after > limit) {
+      const k = limit / after;
+      vel.x *= k;
+      vel.z *= k;
+    }
   }
 
   // 3. Pulo (com buffer e coyote; coyote não vale depois de já ter pulado).
@@ -124,9 +142,16 @@ export function integrateCapsuleBody(
     out.jumped = true;
   }
 
-  // 4. Vertical: segurar o pulo reduz a gravidade na subida por um tempo limitado.
-  const holdActive = body.airborneByJump && intent.jumpHeld && vel.y > 0 && body.jumpHoldTimer < cfg.jumpHoldMaxTime;
-  if (holdActive) body.jumpHoldTimer += dt;
+  // 4. Vertical: segurar o pulo reduz a gravidade na subida por um tempo limitado,
+  // depois de uma zona morta (jumpHoldDeadTime): o keydown que salta já chega com
+  // jumpHeld = true, e um toque humano solta a tecla em ≤ ~80 ms.
+  if (body.airborneByJump && intent.jumpHeld && vel.y > 0) body.jumpHoldTimer += dt;
+  const holdActive =
+    body.airborneByJump &&
+    intent.jumpHeld &&
+    vel.y > 0 &&
+    body.jumpHoldTimer > cfg.jumpHoldDeadTime &&
+    body.jumpHoldTimer <= cfg.jumpHoldDeadTime + cfg.jumpHoldMaxTime;
   const g = cfg.gravity * (holdActive ? cfg.jumpHoldGravityScale : 1);
   vel.y = Math.max(vel.y + g * dt, cfg.maxFallSpeed);
 

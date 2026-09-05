@@ -40,6 +40,21 @@ export type InputBindings = Readonly<Record<string, Action>>;
 const MOUSE_CODE_PREFIX = 'Mouse';
 const WHEEL_CODE = 'Wheel';
 
+const EDITABLE_TAGS: ReadonlySet<string> = new Set(['INPUT', 'TEXTAREA', 'SELECT']);
+
+/** Alvo de teclado que edita texto (campo de formulário ou contentEditable): o jogo não pode roubar as teclas. */
+export function isEditableTarget(target: EventTarget | null): boolean {
+  if (!target) return false;
+  const tag = (target as { tagName?: string }).tagName;
+  if (tag !== undefined && EDITABLE_TAGS.has(tag)) return true;
+  return (target as { isContentEditable?: boolean }).isContentEditable === true;
+}
+
+/** Teclas com modificador (Ctrl+F/S/R/P, Alt+Tab…) são atalhos do navegador/SO. */
+function hasModifier(e: KeyboardEvent): boolean {
+  return e.ctrlKey || e.metaKey || e.altKey;
+}
+
 /**
  * Estado de input amostrado por passo fixo (design §4.3).
  *
@@ -205,13 +220,20 @@ export class InputState {
   private readonly handleKeyDown = (e: KeyboardEvent): void => {
     // preventDefault só em códigos mapeados (espaço não rola a página, F3 não abre busca).
     if (!this.bindings[e.code]) return;
+    // Dois motivos para deixar passar: (1) com modificador é atalho do navegador
+    // (Ctrl+F/S/R/P) e (2) num alvo editável (o painel F4 usa <input>) W/E/setas
+    // são digitação — nem preventDefault nem onKeyCode.
+    if (hasModifier(e) || isEditableTarget(e.target)) return;
     e.preventDefault();
     if (e.repeat) return;
     this.onKeyCode(e.code, true);
   };
 
   private readonly handleKeyUp = (e: KeyboardEvent): void => {
-    if (this.onKeyCode(e.code, false)) e.preventDefault();
+    // Solta SEMPRE (o Ctrl pode ter entrado depois do keydown: senão a tecla ficava presa);
+    // preventDefault só quando o keydown correspondente também o teria feito.
+    const mapped = this.onKeyCode(e.code, false);
+    if (mapped && !(hasModifier(e) || isEditableTarget(e.target))) e.preventDefault();
   };
 
   /** Perder o foco perde o keyup: solta tudo para não "andar sozinho" ao voltar. */

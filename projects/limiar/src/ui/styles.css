@@ -134,6 +134,12 @@ body,
   color: var(--cyan);
 }
 
+.overlay__ctl {
+  white-space: nowrap;
+  display: inline-block;
+  margin: 0 0.4rem;
+}
+
 .overlay__note {
   margin: 1rem 0 0;
   font-size: 0.75rem;

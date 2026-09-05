@@ -1,8 +1,14 @@
 import type * as THREE from 'three';
 
-/** Janela de acumulação de frame time (design §8.1: avg/max de 1 s, média de 3 s). */
+/** Janela de acumulação de frame time (design §8.1: avg/max de 1 s; a média longa é configurável). */
 const WINDOW_SEC = 1;
-const LONG_WINDOWS = 3;
+
+export interface DebugStatsOptions {
+  /** performance.mark/measure por frame (ligado em DEV). */
+  marks: boolean;
+  /** s. Janela da média longa (frameAvg3sMs); o auto-desligar de sombras usa SHADOW_AUTO_OFF.windowSec. */
+  longWindowSec: number;
+}
 
 export interface DebugStatsSnapshot {
   fps: number;
@@ -36,13 +42,18 @@ export class DebugStats {
   private winCount = 0;
   private winSum = 0;
   private winMax = 0;
-  private readonly longSums = new Float64Array(LONG_WINDOWS);
-  private readonly longCounts = new Float64Array(LONG_WINDOWS);
+  /** Quantas janelas de WINDOW_SEC compõem a média longa (≥ 1). */
+  private readonly longWindows: number;
+  private readonly longSums: Float64Array;
+  private readonly longCounts: Float64Array;
   private longIdx = 0;
   private readonly marksEnabled: boolean;
 
-  constructor(opts: { marks: boolean } = { marks: false }) {
+  constructor(opts: DebugStatsOptions) {
     this.marksEnabled = opts.marks && typeof performance !== 'undefined' && typeof performance.mark === 'function';
+    this.longWindows = Math.max(1, Math.round(opts.longWindowSec / WINDOW_SEC));
+    this.longSums = new Float64Array(this.longWindows);
+    this.longCounts = new Float64Array(this.longWindows);
   }
 
   /** Uma vez por frame com o dt do frame (s). */
@@ -60,14 +71,20 @@ export class DebugStats {
 
     this.longSums[this.longIdx] = this.winSum;
     this.longCounts[this.longIdx] = this.winCount;
-    this.longIdx = (this.longIdx + 1) % LONG_WINDOWS;
+    this.longIdx = (this.longIdx + 1) % this.longWindows;
     let sum = 0;
     let count = 0;
-    for (let i = 0; i < LONG_WINDOWS; i++) {
+    for (let i = 0; i < this.longWindows; i++) {
       sum += this.longSums[i] ?? 0;
       count += this.longCounts[i] ?? 0;
     }
     this.frameAvg3sMs = count > 0 ? sum / count : 0;
+
+    // Limpa 1×/s: sem isto a timeline acumula ~540 entradas/s em DEV (6 marks + 3 measures por frame).
+    if (this.marksEnabled) {
+      performance.clearMarks();
+      performance.clearMeasures();
+    }
 
     this.winTime = 0;
     this.winCount = 0;

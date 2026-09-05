@@ -192,7 +192,10 @@ export function resolveCapsuleCollision(
   // Snap ao chão: estava no chão, perdeu contato descendo (rampa) → gruda se o chão está perto.
   if (wasGrounded && !body.grounded && vel.y <= 0) {
     if (probeGround(query, body, t.position, cfg.groundSnapDistance + RAY_MARGIN, cosSlope)) {
-      t.position.y = rayHit.point.y;
+      // Esfera de baixo TANGENTE ao plano, não os pés no ponto: colocar os pés no
+      // ponto penetra r·(1−cosθ) na rampa e o push-out do passo seguinte devolve
+      // r·(1/cosθ−1) — serrote de 12 cm a 40°.
+      t.position.y = rayHit.point.y + body.radius * (1 / rayHit.normal.y - 1);
       body.grounded = true;
       body.groundNormal.copy(rayHit.normal);
       vel.y = 0;

@@ -29,7 +29,7 @@ npm run check
 |---|---|
 | `W A S D` / `↑` | mover |
 | `Shift esq.` | correr (só empurrando para a frente) |
-| `Espaço` | pular — segure para subir mais (≈ 1,4 m no toque, ≈ 2,2 m segurando) |
+| `Espaço` | pular — segure para subir mais (≈ 1,4 m no toque, ≈ 2,1 m segurando) |
 | mouse | olhar (0,022 °/contagem × multiplicador 1,5; sem suavização) |
 | `Esc` | sair do pointer lock = pausa; no modo sem lock, pausa direto |
 
@@ -82,7 +82,7 @@ src/
   game/            Game (estados, pausa, atalhos, HMR), World, GameEvents, systems-list, debug-api
   ui/              DOM puro: overlay, HUD de debug, painel de tuning, styles.css
 tests/             vitest (Node, sem WebGL): loop, input, events, spring, random, storage,
-                   integrate, collision (Octree real), definitions, architecture
+                   integrate, collision (Octree real), definitions, hot-config, architecture
 e2e/smoke.mjs      Chromium headless (SwiftShader) via playwright-core
 ```
 

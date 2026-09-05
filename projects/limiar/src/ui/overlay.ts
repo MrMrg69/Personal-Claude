@@ -22,10 +22,14 @@ const COUNTDOWN_TICK_MS = 100;
 
 const ERROR_KINDS: ReadonlySet<OverlayKind> = new Set(['contextlost', 'nowebgl2', 'fatal']);
 
+/** Cada grupo tecla+descrição é um .overlay__ctl (nowrap): nada de "mais)" órfão na linha seguinte. */
 const CONTROLS_HTML =
-  '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> mover &nbsp; <kbd>Shift</kbd> correr &nbsp; ' +
-  '<kbd>Espaço</kbd> pular (segure para subir mais)<br>' +
-  'mouse olhar &nbsp; <kbd>Esc</kbd> pausar &nbsp; <kbd>F3</kbd> HUD de debug';
+  '<span class="overlay__ctl"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> mover</span>' +
+  '<span class="overlay__ctl"><kbd>Shift</kbd> correr</span>' +
+  '<span class="overlay__ctl"><kbd>Espaço</kbd> pular (segure para subir mais)</span><br>' +
+  '<span class="overlay__ctl">mouse olhar</span>' +
+  '<span class="overlay__ctl"><kbd>Esc</kbd> pausar</span>' +
+  '<span class="overlay__ctl"><kbd>F3</kbd> HUD de debug</span>';
 
 export class Overlay {
   private readonly root: HTMLDivElement;
@@ -33,7 +37,6 @@ export class Overlay {
   private readonly hint: HTMLParagraphElement;
   private readonly note: HTMLParagraphElement;
   private countdown: ReturnType<typeof setInterval> | null = null;
-  private current: OverlayView = { kind: 'ready', mode: 'locked' };
   private clickable = true;
 
   constructor(
@@ -67,13 +70,8 @@ export class Overlay {
     return !this.root.hidden;
   }
 
-  get kind(): OverlayKind {
-    return this.current.kind;
-  }
-
   show(view: OverlayView): void {
     this.stopCountdown();
-    this.current = view;
     this.root.hidden = false;
     const isError = ERROR_KINDS.has(view.kind);
     this.root.classList.toggle('overlay--error', isError);

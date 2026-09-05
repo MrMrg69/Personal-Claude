@@ -6,7 +6,7 @@
 
 ## Estado atual: M0 — esqueleto
 
-Renderização, controlador em primeira pessoa (WASD, sprint, pulo com "hold", step-up, rampas, kick de pouso), mundo de teste ("Campo de Provas"), HUD de debug, painel de tuning com HMR de configuração, testes unitários (11 suítes, 140 testes) e smoke test e2e em Chromium headless. **Sem armas, inimigos ou loot** — os contratos e slots para eles já existem no código e estão descritos no design técnico (§11). Próximo passo: M1 — gunplay ([roadmap](04-roadmap.md)).
+Renderização, controlador em primeira pessoa (WASD, sprint, pulo com "hold", step-up, rampas, kick de pouso), mundo de teste ("Campo de Provas"), HUD de debug, painel de tuning com HMR de configuração, testes unitários (11 suítes, 150 testes) e smoke test e2e em Chromium headless. **Sem armas, inimigos ou loot** — os contratos e slots para eles já existem no código e estão descritos no design técnico (§11). Próximo passo: M1 — gunplay ([roadmap](04-roadmap.md)).
 
 ## Índice
 

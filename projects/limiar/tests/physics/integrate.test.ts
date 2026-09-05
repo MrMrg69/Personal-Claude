@@ -44,13 +44,17 @@ function step(s: Sim, n = 1): void {
   }
 }
 
-/** Salta e devolve a altura máxima atingida (m). */
-function jumpApex(hold: boolean): number {
+/**
+ * Salta segurando o pulo nos primeiros `holdSteps` passos (o keydown que gera
+ * jumpPressed também liga jumpHeld: no navegador o hold nunca é 0 passos) e
+ * devolve a altura máxima atingida (m).
+ */
+function jumpApex(holdSteps: number): number {
   const s = makeSim();
   s.intent.jumpPressed = true;
-  s.intent.jumpHeld = hold;
   let apex = 0;
   for (let i = 0; i < 240; i++) {
+    s.intent.jumpHeld = i < holdSteps;
     step(s);
     apex = Math.max(apex, s.t.position.y);
     if (s.body.velocity.y < 0) break;
@@ -67,14 +71,20 @@ describe('integrateCapsuleBody', () => {
     expect(jumpSpeedFor(MOVEMENT, FIXED_DT)).toBeCloseTo(8.4, 1);
   });
 
-  it('pulo de toque sobe 1,40 ± 0,03 m', () => {
-    const apex = jumpApex(false);
-    expect(apex).toBeGreaterThan(1.37);
-    expect(apex).toBeLessThan(1.43);
+  it('toque (≤ 4 passos = 67 ms) sobe 1,40 ± 0,03 m', () => {
+    for (const holdSteps of [0, 4]) {
+      const apex = jumpApex(holdSteps);
+      expect(apex, `hold ${holdSteps} passos`).toBeGreaterThan(1.37);
+      expect(apex, `hold ${holdSteps} passos`).toBeLessThan(1.43);
+    }
   });
 
-  it('pulo segurado sobe entre 2,0 e 2,4 m', () => {
-    const apex = jumpApex(true);
+  it('toque de 133 ms (8 passos) fica abaixo de 1,7 m', () => {
+    expect(jumpApex(8)).toBeLessThan(1.7);
+  });
+
+  it('segurado (≥ 30 passos) sobe entre 2,0 e 2,4 m', () => {
+    const apex = jumpApex(30);
     expect(apex).toBeGreaterThanOrEqual(2.0);
     expect(apex).toBeLessThanOrEqual(2.4);
   });
@@ -140,6 +150,47 @@ describe('integrateCapsuleBody', () => {
     const before = horizontalSpeed(s);
     step(s, 30);
     expect(horizontalSpeed(s)).toBeCloseTo(before, 9);
+  });
+
+  it('sprint-jump segurando W preserva 8,5 m/s no ar', () => {
+    const s = makeSim();
+    s.intent.dir.set(0, 1);
+    s.intent.sprint = true;
+    step(s, 60);
+    expect(horizontalSpeed(s)).toBeCloseTo(MOVEMENT.sprintSpeed, 6);
+    s.intent.jumpPressed = true;
+    for (let i = 0; i < 40; i++) {
+      step(s);
+      expect(horizontalSpeed(s)).toBeCloseTo(MOVEMENT.sprintSpeed, 6);
+    }
+    expect(s.body.grounded).toBe(false);
+  });
+
+  it('pulo andando + strafe não passa de airMaxSpeed', () => {
+    const s = makeSim();
+    s.intent.dir.set(0, 1);
+    step(s, 60);
+    s.intent.jumpPressed = true;
+    s.intent.dir.set(1, 1);
+    let max = 0;
+    for (let i = 0; i < 40; i++) {
+      step(s);
+      max = Math.max(max, horizontalSpeed(s));
+    }
+    expect(max).toBeLessThanOrEqual(MOVEMENT.airMaxSpeed + 1e-9);
+    expect(s.body.velocity.x).toBeGreaterThan(0);
+  });
+
+  it('sprint-jump + S freia', () => {
+    const s = makeSim();
+    s.intent.dir.set(0, 1);
+    s.intent.sprint = true;
+    step(s, 60);
+    s.intent.jumpPressed = true;
+    s.intent.sprint = false;
+    s.intent.dir.set(0, -1);
+    step(s, 30);
+    expect(horizontalSpeed(s)).toBeLessThan(MOVEMENT.sprintSpeed);
   });
 
   it('queda é limitada por maxFallSpeed', () => {

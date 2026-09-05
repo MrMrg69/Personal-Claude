@@ -54,11 +54,13 @@ interface Sim {
   maxY: number;
   minSpeedAfterAccel: number;
   airSteps: number;
+  /** Mundo de colisão desta simulação (cada describe usa o seu; nada de estado compartilhado por ordem). */
+  world: CollisionWorld;
 }
 
 let world: CollisionWorld;
 
-function makeSim(x: number, y: number, z: number, yawDeg: number): Sim {
+function makeSim(x: number, y: number, z: number, yawDeg: number, w: CollisionWorld = world): Sim {
   const body = createCapsuleBody(MOVEMENT, CollisionLayer.Player, CollisionLayer.World);
   const intent = createMoveIntent();
   intent.yaw = rad(yawDeg);
@@ -72,6 +74,7 @@ function makeSim(x: number, y: number, z: number, yawDeg: number): Sim {
     maxY: y,
     minSpeedAfterAccel: Infinity,
     airSteps: 0,
+    world: w,
   };
 }
 
@@ -80,7 +83,7 @@ function step(s: Sim, n: number): void {
   for (let i = 0; i < n; i++) {
     integrateCapsuleBody(s.t, s.body, s.intent, MOVEMENT, FIXED_DT, s.jumped);
     s.intent.jumpPressed = false;
-    resolveCapsuleCollision(s.t, s.body, world, MOVEMENT, s.resolved);
+    resolveCapsuleCollision(s.t, s.body, s.world, MOVEMENT, s.resolved);
     if (s.resolved.landed) s.landings++;
     s.maxY = Math.max(s.maxY, s.t.position.y);
     if (!s.body.grounded) s.airSteps++;
@@ -348,6 +351,13 @@ describe('CollisionWorld.raycast', () => {
 });
 
 describe('Campo de Provas (data/levels/test-ground) construído de verdade', () => {
+  let tg: CollisionWorld;
+
+  beforeAll(() => {
+    tg = new CollisionWorld();
+    tg.rebuildStatic(buildLevel(TEST_GROUND).collisionRoot);
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -362,16 +372,12 @@ describe('Campo de Provas (data/levels/test-ground) construído de verdade', () 
     expect(built.stats.triangles).toBeLessThan(6000);
     expect(built.helpers.children.length).toBe(3);
     expect(built.playerSpawn.pos).toEqual([0, 0, 12]);
-
-    const tg = new CollisionWorld();
-    tg.rebuildStatic(built.collisionRoot);
     expect(tg.bounds.min.x).toBeLessThanOrEqual(-60);
     expect(tg.bounds.max.z).toBeGreaterThanOrEqual(60);
-    world = tg;
   });
 
   it('spawn assenta em y = 0 e andar 1 s para a frente passa de z = 8 (critério do e2e)', () => {
-    const s = makeSim(0, 0, 12, 0);
+    const s = makeSim(0, 0, 12, 0, tg);
     settle(s);
     expect(s.body.grounded).toBe(true);
     expect(s.t.position.y).toBeCloseTo(0, 2);
@@ -382,7 +388,7 @@ describe('Campo de Provas (data/levels/test-ground) construído de verdade', () 
   });
 
   it('escada: sobe os 4 degraus de 0,25 m sem pular e chega a 1,0 m', () => {
-    const s = makeSim(12, 0, -4, 0);
+    const s = makeSim(12, 0, -4, 0, tg);
     settle(s);
     s.intent.dir.set(0, 1);
     step(s, STEPS_PER_SECOND);
@@ -393,7 +399,7 @@ describe('Campo de Provas (data/levels/test-ground) construído de verdade', () 
   });
 
   it('corredor de 1,2 m em (0, 0, −26): atravessa', () => {
-    const s = makeSim(0.1, 0, -18, 0);
+    const s = makeSim(0.1, 0, -18, 0, tg);
     settle(s);
     s.intent.dir.set(0, 1);
     step(s, 3 * STEPS_PER_SECOND);
@@ -402,7 +408,7 @@ describe('Campo de Provas (data/levels/test-ground) construído de verdade', () 
   });
 
   it('rampa suave chega à plataforma de 3 m; rampa íngreme não sobe', () => {
-    const gentle = makeSim(-14, 0, 0, 90);
+    const gentle = makeSim(-14, 0, 0, 90, tg);
     settle(gentle);
     gentle.intent.dir.set(0, 1);
     step(gentle, 2 * STEPS_PER_SECOND);
@@ -410,11 +416,51 @@ describe('Campo de Provas (data/levels/test-ground) construído de verdade', () 
     expect(gentle.t.position.y).toBeCloseTo(3, 1);
     expect(gentle.body.grounded).toBe(true);
 
-    const steep = makeSim(-14, 0, -8, 90);
+    const steep = makeSim(-14, 0, -8, 90, tg);
     settle(steep);
     steep.intent.dir.set(0, 1);
     step(steep, 2 * STEPS_PER_SECOND);
     expect(steep.maxY).toBeLessThan(1.5);
     expect(steep.t.position.x).toBeGreaterThan(-19.5);
+  });
+
+  it('rampa 40°: desce andando e em sprint sem perder o chão nem pousar', () => {
+    for (const sprint of [false, true]) {
+      const s = makeSim(-21.6, 3.1, 7, -90, tg);
+      settle(s);
+      s.intent.dir.set(0, 1);
+      s.intent.sprint = sprint;
+      step(s, 2 * STEPS_PER_SECOND);
+      expect(s.airSteps, `sprint=${sprint}`).toBe(0);
+      expect(s.landings, `sprint=${sprint}`).toBe(0);
+      expect(s.body.grounded).toBe(true);
+      expect(s.t.position.y).toBeCloseTo(0, 1);
+      expect(s.t.position.x).toBeGreaterThan(-12);
+    }
+  });
+
+  it('escada: desce os 4 degraus andando e em sprint sem ar nem pouso', () => {
+    for (const sprint of [false, true]) {
+      const s = makeSim(12, 1.0, -9.5, 180, tg);
+      settle(s);
+      s.intent.dir.set(0, 1);
+      s.intent.sprint = sprint;
+      step(s, 45);
+      expect(s.airSteps, `sprint=${sprint}`).toBe(0);
+      expect(s.landings, `sprint=${sprint}`).toBe(0);
+      expect(s.body.grounded).toBe(true);
+      expect(s.t.position.y).toBeCloseTo(0, 2);
+      expect(s.t.position.z).toBeGreaterThan(-5.5);
+    }
+  });
+
+  it('sair de um caixote de 1 m continua sendo queda (o snap não gruda 1 m)', () => {
+    const s = makeSim(13, 1.0, 0, -90, tg);
+    settle(s);
+    s.intent.dir.set(0, 1);
+    step(s, STEPS_PER_SECOND);
+    expect(s.landings).toBe(1);
+    expect(s.airSteps).toBeGreaterThanOrEqual(10);
+    expect(s.t.position.y).toBeCloseTo(0, 2);
   });
 });

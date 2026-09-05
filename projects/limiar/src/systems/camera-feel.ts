@@ -1,5 +1,6 @@
 import { clamp, damp, rad } from '@/core/math';
 import { Spring } from '@/core/math/spring';
+import type { FeelConfig } from '@/data/feel-config';
 import type { System } from './system';
 
 /** Abaixo disto a mudança de FOV não vale um updateProjectionMatrix. */
@@ -34,6 +35,13 @@ export function createCameraFeelSystem(): System {
   let bobAmp = 0;
   const unsubscribe: (() => void)[] = [];
 
+  const applySpringParams = (feel: FeelConfig): void => {
+    landPitch.zeta = landY.zeta = feel.landKick.zeta;
+    landPitch.omega = landY.omega = feel.landKick.omega;
+    recoilPitch.zeta = recoilYaw.zeta = recoilBack.zeta = feel.recoil.zeta;
+    recoilPitch.omega = recoilYaw.omega = recoilBack.omega = feel.recoil.omega;
+  };
+
   return {
     name: 'camera-feel',
     init(world) {
@@ -42,17 +50,19 @@ export function createCameraFeelSystem(): System {
         world.events.on('player:landed', ({ fallSpeed }) => {
           const k = world.cfg.feel.landKick;
           const amp = clamp(fallSpeed / k.fallSpeedRef, 0, 1);
+          // ζ/ω aplicados ANTES do impulso: kickToPeak calibra pelo ζ/ω correntes.
+          applySpringParams(world.cfg.feel);
           // Pitch negativo = olhar para baixo (rotation.x da cabeça); a cabeça afunda.
-          landPitch.kick(-amp * rad(k.pitchDeg) * k.omega);
-          landY.kick(-amp * k.posY * k.omega);
+          landPitch.kickToPeak(-amp * rad(k.pitchDeg));
+          landY.kickToPeak(-amp * k.posY);
           landFovAmp = amp;
           landFovTimer = world.cfg.camera.landFovKickTime;
         }),
         world.events.on('camera:kick', (kick) => {
-          const r = world.cfg.feel.recoil;
+          applySpringParams(world.cfg.feel);
           recoilOffsetPitch += rad(kick.pitchDeg);
           recoilOffsetYaw += rad(kick.yawDeg);
-          recoilBack.kick(kick.posBack * r.omega);
+          recoilBack.kickToPeak(kick.posBack);
         }),
       );
     },
@@ -63,10 +73,7 @@ export function createCameraFeelSystem(): System {
       const out = world.headOffsets;
 
       // Parâmetros lidos no uso: HMR/painel valem no próximo frame.
-      landPitch.zeta = landY.zeta = feel.landKick.zeta;
-      landPitch.omega = landY.omega = feel.landKick.omega;
-      recoilPitch.zeta = recoilYaw.zeta = recoilBack.zeta = feel.recoil.zeta;
-      recoilPitch.omega = recoilYaw.omega = recoilBack.omega = feel.recoil.omega;
+      applySpringParams(feel);
 
       // Recuperação do recoil: o alvo volta a zero a velocidade constante.
       const recovery = rad(feel.recoil.recoveryDegPerSec) * dt;
