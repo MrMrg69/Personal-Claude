@@ -1,3 +1,5 @@
+import { keepLive } from './hot-config';
+
 /** Feel de câmera em M0 (design §5.5): kick de pouso, slot de recoil, head-bob desligado. */
 export interface FeelConfig {
   landKick: {
@@ -29,7 +31,15 @@ export interface FeelConfig {
   };
 }
 
-export const FEEL: FeelConfig = {
+/** Copia por sub-objeto: não troca as referências aninhadas (o painel lil-gui liga nelas). */
+function assignFeel(live: FeelConfig, fresh: FeelConfig): void {
+  Object.assign(live.landKick, fresh.landKick);
+  Object.assign(live.recoil, fresh.recoil);
+  Object.assign(live.recoil.debugKick, fresh.recoil.debugKick);
+  Object.assign(live.headBob, fresh.headBob);
+}
+
+const DEFAULTS: FeelConfig = {
   landKick: { pitchDeg: 2.5, posY: 0.06, fallSpeedRef: 20, zeta: 0.6, omega: 22 },
   recoil: {
     zeta: 0.55,
@@ -40,14 +50,7 @@ export const FEEL: FeelConfig = {
   headBob: { enabled: false, ampY: 0.018, ampX: 0.01, rollDeg: 0.25, hz: 1.9 },
 };
 
-// HMR: copia por sub-objeto para não trocar as referências aninhadas (painel lil-gui liga nelas).
-if (import.meta.hot) {
-  import.meta.hot.accept((mod) => {
-    const next: FeelConfig | undefined = mod?.FEEL;
-    if (!next) return;
-    Object.assign(FEEL.landKick, next.landKick);
-    Object.assign(FEEL.recoil, next.recoil);
-    Object.assign(FEEL.recoil.debugKick, next.recoil.debugKick);
-    Object.assign(FEEL.headBob, next.headBob);
-  });
-}
+/** Objeto MUTÁVEL (HMR/painel); keepLive mantém a referência entre edições. */
+export const FEEL: FeelConfig = keepLive(import.meta.hot, 'feel', DEFAULTS, assignFeel);
+
+if (import.meta.hot) import.meta.hot.accept();

@@ -1,3 +1,5 @@
+import { keepLive } from './hot-config';
+
 /** Look, FOV e sensibilidade (design §5.4). Só dados; o rig fica em core/camera-rig.ts. */
 export interface CameraConfig {
   /** FOV horizontal padrão (graus). É a fonte da verdade; vfov deriva do aspect. */
@@ -24,7 +26,8 @@ export interface CameraConfig {
   viewmodelFar: number;
 }
 
-export const CAMERA: CameraConfig = {
+/** Objeto MUTÁVEL (HMR/painel); keepLive mantém a referência entre edições. */
+export const CAMERA: CameraConfig = keepLive(import.meta.hot, 'camera', {
   hfovDeg: 95,
   sprintFovAddDeg: 6,
   fovDampLambda: 10,
@@ -38,10 +41,6 @@ export const CAMERA: CameraConfig = {
   far: 300,
   viewmodelNear: 0.01,
   viewmodelFar: 5,
-};
+});
 
-if (import.meta.hot) {
-  import.meta.hot.accept((mod) => {
-    if (mod) Object.assign(CAMERA, mod.CAMERA);
-  });
-}
+if (import.meta.hot) import.meta.hot.accept();

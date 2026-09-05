@@ -1,10 +1,12 @@
 import type { MovementConfig } from '@/core/physics/movement-config';
+import { keepLive } from './hot-config';
 
 /**
  * Física do movimento (design §5.1). Objeto MUTÁVEL: HMR e o painel de tuning
  * alteram os campos in-place; sistemas leem `cfg.movement.x` no momento do uso.
+ * keepLive mantém a referência entre edições (ver hot-config.ts).
  */
-export const MOVEMENT: MovementConfig = {
+export const MOVEMENT: MovementConfig = keepLive(import.meta.hot, 'movement', {
   capsuleRadius: 0.4,
   capsuleHeight: 1.8,
   eyeHeight: 1.62,
@@ -24,7 +26,7 @@ export const MOVEMENT: MovementConfig = {
   slopeLimitDeg: 46,
   stepHeight: 0.35,
   groundSnapDistance: 0.2,
-};
+});
 
 /** Limiares derivados do movimento (locomotion-state, kill-plane). */
 export const LOCOMOTION = {
@@ -37,9 +39,5 @@ export const RESPAWN = {
   safeGroundedSeconds: 1,
 } as const;
 
-// HMR: nunca troque a referência — copie os campos novos sobre o objeto vivo.
-if (import.meta.hot) {
-  import.meta.hot.accept((mod) => {
-    if (mod) Object.assign(MOVEMENT, mod.MOVEMENT);
-  });
-}
+// Auto-aceita: o servidor do Vite lê esta chamada no fonte; a cópia é feita por keepLive.
+if (import.meta.hot) import.meta.hot.accept();

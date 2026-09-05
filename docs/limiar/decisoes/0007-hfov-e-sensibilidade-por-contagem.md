@@ -2,7 +2,7 @@
 
 ## Status
 
-Aceita (M0). Referência: design técnico §5.4. Valores em `src/data/camera-config.ts` e sistema `src/systems/player-look.ts` (planejados).
+Aceita (M0). Referência: design técnico §5.4. Valores em `src/data/camera-config.ts` (`CAMERA`) e `src/data/settings-defaults.ts`; conversão em `hfovToVfov`/`CameraRig.setHfov` (`src/core/camera-rig.ts`); look em `src/systems/player-look.ts`; FOV dinâmico em `src/systems/camera-feel.ts`.
 
 ## Contexto
 
@@ -12,18 +12,21 @@ Aceita (M0). Referência: design técnico §5.4. Valores em `src/data/camera-con
 
 | Parâmetro | Valor | Detalhe |
 |---|---|---|
-| `hfovDeg` | **95°** (faixa 80–110) | `vfov = 2·atan(tan(hfov/2) / aspect)` recalculado no resize (16:9 → 63,1°). Ultrawide não zooma. |
-| `sprintFovAddDeg` / `fovDampLambda` | +6° h / 10 | FOV dinâmico por `locomotion` (damp exponencial ≈ 0,15 s). Kick de pouso: −3° por 0,1 s. |
+| `CAMERA.hfovDeg` | **95°** (padrão) | `vfov = 2·atan(tan(hfov/2) / aspect)` (`hfovToVfov`), recalculado no resize (16:9 → 63,1°). Ultrawide não zooma. |
+| `settings.hfovDeg` | 80–110 (`SETTINGS_RANGES`), persistido | A escolha do jogador; `CAMERA.hfovDeg` é só o padrão. |
+| `sprintFovAddDeg` / `fovDampLambda` | +6° h / 10 | FOV dinâmico por `locomotion` (damp exponencial ≈ 0,15 s). |
+| `landFovKickDeg` / `landFovKickTime` | −3° / 0,1 s | Kick de FOV no pouso. |
 | `viewmodelFovDeg` | 55° vertical fixo | Arma não estica (ADR 0006). |
 | `sensitivityDegPerCount` | **0,022** | `yaw −= dx · 0,022 · mult · DEG2RAD`; `pitch −= dy · 0,022 · mult · DEG2RAD`. |
 | `settings.sensitivityMultiplier` | **1,5** padrão (0,1–5,0), persistido | ≈ 27,8 cm por 360° a 1000 DPI. |
 | `adsMultiplier` | 0,8 | Usado em M1. |
-| `pitchClampDeg` | ±89° | Aplicado **depois** de somar recoil e kicks. |
-| Suavização / aceleração de mouse | **nenhuma** | `requestPointerLock({ unadjustedMovement: true })` desliga a aceleração do SO. |
+| `pitchClampDeg` | ±89° | Aplicado em `player-look` no look bruto e **de novo em `CameraRig.applyPose` depois** de somar recoil e kicks. |
+| Suavização / aceleração de mouse | **nenhuma** | `requestPointerLock({ unadjustedMovement: true })` em `src/core/pointer-lock.ts` desliga a aceleração do SO. |
 
 - O look é aplicado em `frameUpdate` (taxa do monitor), não no passo fixo (ADR 0002). `yaw` é normalizado com `MathUtils.euclideanModulo(yaw, 2π)`.
-- `consumeMouseDelta` (`InputState`, planejado em `src/core/input.ts`) devolve contagens acumuladas desde a última chamada, então a sensibilidade independe do FPS.
-- No resize, as duas câmeras do rig recalculam `fov` a partir de hFOV e chamam `updateProjectionMatrix()`.
+- `InputState.consumeMouseDelta(out)` (`src/core/input.ts`) devolve as contagens acumuladas desde a última chamada, então a sensibilidade independe do FPS. Fora de `running` ou em modo de tuning o delta é consumido e descartado.
+- No resize, `setHfov` recalcula o `fov` da câmera do mundo a partir do hFOV e chama `updateProjectionMatrix()` nas duas câmeras.
+- O HUD mostra `hfov <settings>→<efetivo> (vfov …)` — o efetivo inclui o FOV dinâmico.
 
 ## Alternativas consideradas
 
@@ -37,7 +40,7 @@ Aceita (M0). Referência: design técnico §5.4. Valores em `src/data/camera-con
 ## Consequências
 
 - Positivas: configurações comparáveis com outros jogos (o jogador pode trazer sua sensibilidade); ultrawide e 4:3 veem o mesmo campo horizontal; recoil nunca vira a câmera.
-- Positivas: o teste de `player-look` (planejado) pode afirmar "N contagens = N·0,022·mult graus" com números exatos.
+- Positivas: o e2e (`e2e/smoke.mjs`) já usa a convenção: injeta `dx = −90 / sensDegPerCount` contagens e confere um giro de ~90°. Um teste unitário de `player-look` com a mesma afirmação é planejado.
 - Negativas: `hfov` precisa ser convertido a cada resize e para as duas câmeras; quem ler `camera.fov` direto vê o vertical.
 
 ## Gatilho de revisão

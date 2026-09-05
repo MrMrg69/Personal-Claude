@@ -2,7 +2,7 @@
 
 ## Status
 
-Aceita (M0). Referência: design técnico §4.1–4.3. Implementado em `src/core/time.ts` e `src/core/loop.ts`.
+Aceita (M0). Referência: design técnico §4.1–4.3. Implementado em `src/core/time.ts`, `src/core/loop.ts`, `src/systems/view-sync.ts` e `src/systems/player-look.ts`.
 
 ## Contexto
 
@@ -12,12 +12,12 @@ Um shooter precisa de pulo com a mesma altura em qualquer monitor, cooldowns e r
 
 - Simulação a **60 Hz fixos**: `FIXED_DT = 1/60`, `MAX_FRAME_DT = 0.1`, `MAX_STEPS_PER_FRAME = 5` (`src/core/time.ts`).
 - Render na taxa do monitor via `renderer.setAnimationLoop(t => loop.tick(t))`. `GameLoop.tick(nowMs)` acumula o delta, roda 0..5 `fixedUpdate`, chama `frameUpdate(dt, alpha)` com `alpha = acc / FIXED_DT` e depois `render()`.
-- Ao atingir o teto de 5 passos, o resto do acumulador é **descartado** (`stats.droppedSteps++`), nunca "alcançado" — sem espiral da morte.
-- Posições renderizadas = `lerp(prevPosition, position, alpha)` (`view-sync`, planejado).
-- **Look do mouse é aplicado em `frameUpdate`**, não no passo fixo: a câmera responde na taxa do monitor sem latência. A simulação lê `look.yaw` no início do passo.
-- **Bordas de input (`justPressed`) são limpas só em `endFixedStep()`**, nunca por frame.
+- Ao atingir o teto de 5 passos, o resto do acumulador é **descartado** (`stats.droppedSteps++`, `acc = 0`), nunca "alcançado" — sem espiral da morte. `stats.stepsLastFrame` aparece no HUD como `sim N passo/frame`.
+- Posições renderizadas = `lerp(prevPosition, position, alpha)` em `view-sync`.
+- **Look do mouse é aplicado em `frameUpdate`** (`player-look`), não no passo fixo: a câmera responde na taxa do monitor sem latência. A simulação lê `look.yaw` no início do passo.
+- **Bordas de input (`justPressed`) são limpas só em `InputState.endFixedStep()`**, nunca por frame.
 - `pause()` congela a simulação; o render continua com `alpha = 1`. `resume()` zera acumulador e `lastMs` (aba oculta por 30 s não integra 30 s).
-- Sem `THREE.Clock`/`Timer`: o loop controla o relógio e recebe `nowMs` de fora, o que o torna testável em Node.
+- Sem `THREE.Clock`/`Timer`: o loop recebe `nowMs` de fora, o que o torna testável em Node.
 
 ## Alternativas consideradas
 
@@ -29,7 +29,7 @@ Um shooter precisa de pulo com a mesma altura em qualquer monitor, cooldowns e r
 
 ## Consequências
 
-- Positivas: determinismo prático (pulo de toque 1,40 m a 60 e a 144 Hz); `tests/core/loop.test.ts` e `tests/physics/integrate.test.ts` (planejados) chamam `fixedUpdate` N vezes e comparam valores.
+- Positivas: determinismo prático (pulo de toque 1,40 m a 60 e a 144 Hz); `tests/core/loop.test.ts` e `tests/physics/integrate.test.ts` chamam `tick`/`fixedUpdate` N vezes e comparam valores.
 - Positivas: deslocamento máximo por passo conhecido → sem tunelamento até 24 m/s; acima disso (dash em M3) entram sub-passos de colisão.
 - Negativas: precisa de `prevPosition` em todo `Transform` e de interpolação para tudo que se move. Custo aceito.
 - Negativas: a velocidade de salto precisa de correção de discretização (`jumpSpeed = √(2·|g|·h) + |g|·dt/2`, ver `jumpSpeedFor` em `src/core/physics/capsule-body.ts`).

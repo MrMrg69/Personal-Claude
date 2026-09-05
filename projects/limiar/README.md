@@ -88,10 +88,12 @@ e2e/smoke.mjs      Chromium headless (SwiftShader) via playwright-core
 
 Regras de dependência entre pastas são verificadas por `tests/architecture.test.ts`.
 
+**Tuning a quente:** editar `src/data/{movement,camera,feel,render}-config.ts` com `npm run dev` aplica no próximo passo sem recarregar a página, quantas vezes for (o objeto de config vive em `import.meta.hot.data`; ver `src/data/hot-config.ts`). O painel `F4` edita os mesmos objetos; "Copiar JSON" devolve os valores para colar no arquivo.
+
 ## Testes
 
 ```sh
-npm test            # vitest: 10 suítes
+npm test            # vitest: 11 suítes
 npm run test:e2e    # build (se não houver dist/) → vite preview → Chromium headless
 ```
 

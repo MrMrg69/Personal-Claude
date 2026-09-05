@@ -4,7 +4,7 @@
 >
 > Convenções: identificadores em inglês; comentários e docs em PT-BR; nomes de jogo conforme o léxico (§14 do design): **Vigia** (jogador), **Campo de Provas** (mundo de teste), **Lume** (poder), slots **Ferro/Afim/Pesado**.
 
-Documentos relacionados: [visão e design](./01-visao-e-design.md) · [design técnico](./02-design-tecnico.md) · [roadmap](./04-roadmap.md) · [performance](./05-performance.md) · [decisões (ADRs)](./decisoes/README.md).
+Documentos relacionados: [visão e design](./01-visao-e-design.md) · [design técnico](./02-design-tecnico.md) · [roadmap](./04-roadmap.md) · [performance](./05-performance.md) · [guia de desenvolvimento](./06-guia-de-desenvolvimento.md) · [decisões (ADRs)](./decisoes/README.md) · [README do projeto](../../projects/limiar/README.md).
 
 ---
 
@@ -33,10 +33,10 @@ Números de referência do M0 (medidos no e2e em SwiftShader e no dev server):
 | Métrica | Valor |
 |---|---|
 | Arquivos em `src/` | 62 (`.ts` + `styles.css` + `vite-env.d.ts`) |
-| Draw calls por frame | **4** sem sombras · **8** com sombras · 7–9 com helpers (F6) |
-| Triângulos do Campo de Provas | ≈ 1,1–1,4 k em 4 meshes (uma por quadrante) |
-| Bundle de produção | `three` ≈ 135 kB gz + jogo ≈ 20,5 kB gz + CSS ≈ 1 kB |
-| Testes | 10 suítes vitest (135 testes) + `e2e/smoke.mjs` |
+| Draw calls por frame | **4** sem sombras · **8** com sombras (4 chunks + 4 da passada de sombra) · +4 com helpers (F6) |
+| Triângulos visíveis | ≈ 1,1–2,3 k conforme o frustum; Campo de Provas inteiro em 4 meshes (uma por quadrante) |
+| Bundle de produção | `three` ≈ 538 kB (135 kB gz) + jogo ≈ 56 kB (20,5 kB gz) + CSS ≈ 1 kB |
+| Testes | 11 suítes vitest (140 testes) + `e2e/smoke.mjs` |
 
 ---
 
@@ -77,10 +77,11 @@ Cada linha corresponde a um arquivo que existe em `projects/limiar/src/`.
 | `palette.ts` | `PALETTE` (ocre, terracota, névoa lilás, ciano-vigia, magenta-maré, elementos, facções, raridades, props) |
 | `elements.ts` | `ELEMENTS`: Brasa (`ember`), Ressonância (`resonance`), Névoa (`haze`) |
 | `factions.ts` | `FACTIONS`: Axioma (`axiom`), Ferrugem (`rust`), Cepa (`strain`) com unidades previstas |
-| `movement-config.ts` | `MOVEMENT` (mutável, HMR), `LOCOMOTION`, `RESPAWN` |
-| `camera-config.ts` | `CameraConfig` (tipo) e `CAMERA` (mutável, HMR) |
-| `feel-config.ts` | `FeelConfig` (tipo) e `FEEL` (mutável, HMR por sub-objeto) |
-| `render-config.ts` | `RENDER`, `RENDER_SCALE_ALT = 0.75`, `SHADOW_AUTO_OFF` (sem HMR próprio — ver §15) |
+| `hot-config.ts` | `keepLive(hot, key, fresh, assign?)` — mantém a **mesma referência** do objeto de config entre edições (via `import.meta.hot.data`); `assignFlat`; `onConfigHotUpdate(fn)` — ouvintes avisados a cada substituição (ver §15) |
+| `movement-config.ts` | `MOVEMENT` (mutável; `keepLive` + `import.meta.hot.accept()`), `LOCOMOTION`, `RESPAWN` |
+| `camera-config.ts` | `CameraConfig` (tipo) e `CAMERA` (mutável; `keepLive`) |
+| `feel-config.ts` | `FeelConfig` (tipo) e `FEEL` (mutável; `keepLive` com `assignFeel`, cópia por sub-objeto) |
+| `render-config.ts` | `RENDER` (mutável; `keepLive` com `assignRenderConfig`), `assignRenderConfig`, `RENDER_SCALE_ALT = 0.75`, `SHADOW_AUTO_OFF` |
 | `settings-defaults.ts` | `Settings`, `DEFAULT_SETTINGS`, `SETTINGS_SAVE_KEY = 'limiar.settings'`, `SETTINGS_SAVE_VERSION = 1`, `SETTINGS_MIGRATIONS`, `SETTINGS_RANGES`, `isSettings` |
 | `input-bindings.ts` | `INPUT_BINDINGS: InputBindings` (`KeyboardEvent.code` → `Action`) |
 | `levels/level-def.ts` | `Vec3`, `BoxDef`, `RampDef`, `CylinderDef`, `PrimitiveDef`, `SpawnTag`, `SpawnPoint`, `LevelDef` |
@@ -110,7 +111,7 @@ Cada linha corresponde a um arquivo que existe em `projects/limiar/src/`.
 | `system.ts` | — | `interface System { name; init?; fixedUpdate?; frameUpdate?; dispose? }` |
 | `player-input.ts` | fixed #1 | `InputState` + `look.yaw` → `player.intent` |
 | `character-physics.ts` | fixed #2 | para toda entidade com `body`: `integrateCapsuleBody` + `resolveCapsuleCollision`; emite `player:jumped`/`player:landed` |
-| `kill-plane.ts` | fixed #3 | amostra `lastSafePosition`; `y < killPlaneY` → respawn; exporta `placePlayer`, `respawnPlayer` |
+| `kill-plane.ts` | fixed #3 | amostra `lastSafePosition` a cada 1 s de chão contínuo, com um estágio de atraso (`candidate`); `y < killPlaneY` → respawn; exporta `placePlayer`, `respawnPlayer` |
 | `locomotion-state.ts` | fixed #4 | `idle/walk/sprint/air` + `player:locomotionChanged` |
 | `player-look.ts` | frame #1 | mouse → `look.yaw/pitch`; `transform.yaw = look.yaw` |
 | `camera-feel.ts` | frame #2 | molas de kick de pouso e recoil, FOV dinâmico, head-bob → `world.headOffsets` |
@@ -122,7 +123,7 @@ Cada linha corresponde a um arquivo que existe em `projects/limiar/src/`.
 
 | Arquivo | Conteúdo |
 |---|---|
-| `game.ts` | classe `Game`: monta renderer, cena, rig, nível, colisão, jogador, luzes, entidades, sistemas, UI, pointer lock, loop; estados/pausa; atalhos de debug; HMR de render; API de debug |
+| `game.ts` | classe `Game`: monta renderer, cena, rig, nível, colisão, jogador, luzes, entidades, sistemas, UI, pointer lock, loop; estados/pausa; atalhos de debug; ouve `onConfigHotUpdate` (HMR) e `config:changed`; API de debug |
 | `world.ts` | `interface World`, `GameConfig`, `WorldInit`, `createWorld` |
 | `events.ts` | `GameEvents`, `WeaponSlotId`, `CameraKick` |
 | `state.ts` | `GameState`, `InputMode` |
@@ -148,7 +149,7 @@ Cada linha corresponde a um arquivo que existe em `projects/limiar/src/`.
 | `vite.config.ts` | alias `@` → `src`, `base: './'`, chunk `three` via `rolldownOptions.output.codeSplitting` |
 | `vitest.config.ts` | ambiente `node`, `tests/**/*.test.ts` |
 | `e2e/smoke.mjs` | build → preview → Chromium headless → asserções (ver §17) |
-| `tests/` | `architecture`, `core/{loop,input,events,spring,random,storage}`, `physics/{integrate,collision}`, `data/definitions`, `helpers/fake-storage` |
+| `tests/` | `architecture`, `core/{loop,input,events,spring,random,storage}`, `physics/{integrate,collision}`, `data/{definitions,hot-config}`, `helpers/fake-storage` |
 
 ---
 
@@ -169,7 +170,7 @@ O teste lê todos os fontes com `import.meta.glob('/src/**/*.ts', { query: '?raw
 Consequências práticas visíveis no código:
 
 - A interface que `resolveCapsuleCollision` consome (`CollisionQuery`) está em `core/physics/collision-query.ts`; `world/collision-world.ts` a implementa. `core/` nunca importa `world/`.
-- `data/render-config.ts` não tem HMR próprio: aplicar a config exige o renderer, então o `import.meta.hot.accept('../data/render-config', …)` fica em `game/game.ts`.
+- `data/` não conhece o renderer, mas `render-config.ts` precisa de aplicação explícita após HMR. A ponte é `data/hot-config.ts`: o módulo de config se auto-aceita e chama `keepLive`, que avisa os ouvintes registrados por `onConfigHotUpdate`; `game/game.ts` é quem ouve e aplica (`Renderer.applyConfig` + `applyLightingConfig`). Assim `data/` continua sem importar `core/` como valor.
 - `ui/tuning-panel.ts` carrega lil-gui com `import()` dinâmico (o teste só inspeciona imports estáticos).
 
 ---
@@ -187,7 +188,7 @@ flowchart TD
         T["time.sim += dt; time.step++"] --> DK["handleDebugKeys() — F3 F4 F6 F7 F8 F9 P T Esc"]
         DK --> S1["player-input: InputState + look.yaw → player.intent"]
         S1 --> S2["character-physics: integrateCapsuleBody → resolveCapsuleCollision\nemit player:jumped / player:landed"]
-        S2 --> S3["kill-plane: lastSafePosition a cada 1 s no chão; y < killPlaneY → respawn"]
+        S2 --> S3["kill-plane: a cada 1 s no chão promove candidate → lastSafePosition; y < killPlaneY → respawn"]
         S3 --> S4["locomotion-state: idle/walk/sprint/air → player:locomotionChanged"]
         S4 --> FL["events.flush() → entities.flushRemovals() → input.endFixedStep()"]
     end
@@ -410,12 +411,12 @@ export function resolveCapsuleCollision(
 ): void;
 ```
 
-Algoritmo por passo (constantes locais: `MAX_ITERATIONS = 5`, `PUSH_EPSILON = 1e-3`, `RAY_MARGIN = 0.05`):
+Algoritmo por passo (constantes locais: `MAX_ITERATIONS = 5`, `PUSH_EPSILON = 1e-3`, `MIN_HORIZONTAL_NORMAL = 1e-3`, `RAY_MARGIN = 0.05`):
 
 1. `wasGrounded = body.grounded; body.grounded = false`; cápsula dos pés (`start = pé + r`, `end = pé + h − r`).
 2. Até 5×: `capsuleIntersect` → empurra por `normal·(depth + 1 mm)`.
    - `normal.y ≥ cos(46°)` → chão: `grounded`, `groundNormal`, `vel.y = max(vel.y, 0)`.
-   - Senão, se `wasGrounded`: **tenta step-up primeiro** (`tryStepUp`); se falhar, `slide`.
+   - Senão, se `wasGrounded && stepHeight > 0`: **tenta step-up primeiro** (`tryStepUp`); se falhar, `slide`.
 3. `position = capsule.start − (0, r, 0)`.
 4. **Snap ao chão** se `wasGrounded && !grounded && vel.y ≤ 0`: raio para baixo do centro dos pés e, se falhar e houver velocidade horizontal, um segundo raio na borda dianteira (`centro + r · dir(vel)`), alcance `groundSnapDistance + 0,05`.
 5. `grounded` → `timeSinceGrounded = 0; airborneByJump = false`. `out.landed = !wasGrounded && grounded`; `out.fallSpeed = max(0, −vel.y antes do passo)`.
@@ -636,7 +637,7 @@ Eventos definidos em `GameEvents`:
 | `player:respawned` | `{ reason: 'killplane' \| 'debug' }` | `kill-plane` |
 | `camera:kick` | `CameraKick { pitchDeg, yawDeg, posBack }` | F9 / painel → ouvido por `camera-feel` |
 | `render:shadowsChanged` | `{ enabled, auto }` | `debug-stats-system`, `Game.applySettings` |
-| `config:changed` | `{ path }` | HMR, painel, atalhos → ouvido por `Game` (aplica render) |
+| `config:changed` | `{ path }` | HMR (`path` = `'movement' \| 'camera' \| 'feel' \| 'render'`), painel e atalhos (`'render.shadows'`, `'settings.hfovDeg'`…), auto-off de sombras → ouvido por `Game`, que reaplica renderer + luzes quando `path` começa com `render` |
 | reservados | `weapon:fired`, `hit:confirmed`, `entity:died`, `loot:dropped`, `item:equipped`, `power:changed` | assinaturas fixadas; sistemas em M1+ |
 
 Regra: `emit` para reações no mesmo frame (kick de câmera, hitmarker); `queue` para consequências que criam/removem entidades — o loop chama `events.flush()` e **depois** `entities.flushRemovals()` ao fim de cada passo fixo, fora das iterações. `WeaponSlotId = 'iron' | 'attuned' | 'heavy'` (Ferro/Afim/Pesado) já vive em `game/events.ts`.
@@ -649,11 +650,19 @@ Regra: `emit` para reações no mesmo frame (kick de câmera, hitmarker); `queue
 
 | Caminho | Quem muda | Como chega |
 |---|---|---|
-| Arquivo em `src/data/*-config.ts` | editor + HMR do Vite | `movement`, `camera`, `feel` se **auto-aceitam** e copiam os campos novos sobre o objeto vivo (`Object.assign`; `feel` copia por sub-objeto para não trocar referências que o painel liga). Sistemas leem `world.cfg.x.y` **no momento do uso**, então o valor vale no passo seguinte |
+| Arquivo em `src/data/*-config.ts` | editor + HMR do Vite | os quatro módulos (`movement`, `camera`, `feel`, `render`) se **auto-aceitam** (`import.meta.hot.accept()` literal no fonte) e exportam `keepLive(import.meta.hot, key, fresh, assign)`: a versão nova encontra o objeto vivo em `import.meta.hot.data[key]`, copia os valores por cima (`Object.assign`; `feel` e `render` copiam por sub-objeto para não trocar referências que o painel liga) e o reexporta. Sistemas leem `world.cfg.x.y` **no momento do uso**, então o valor vale no passo seguinte |
 | Painel lil-gui (F4) | usuário em DEV | liga direto nos objetos de `world.cfg`; `render`/`settings` chamam hooks (`onRenderChanged`, `onSettingsChanged`) porque exigem aplicação explícita; `.listen()` mantém os sliders sincronizados com HMR e atalhos |
 | Flags de URL e `Settings` | usuário | `?shadows ?scale ?hud` sobrepõem sem persistir; atalhos F3/F7/F8 mudam `settings` e persistem |
 
-`render-config` é a exceção documentada: `data/` não conhece o renderer, então `game.ts` faz `import.meta.hot.accept('../data/render-config', …)`, copia com `assignRenderConfig`, **preserva `shadows`/`renderScale` das settings do usuário** e emite `config:changed { path: 'render' }` → `Game.applyRenderConfig` → `renderer.applyConfig(cfg, scene)` + `applyLightingConfig(lighting, scene, cfg)`.
+```ts
+// data/hot-config.ts
+export function keepLive<T extends object>(hot: ImportMeta['hot'], key: string, fresh: T, assign: (live: T, fresh: T) => void = assignFlat): T;
+export function onConfigHotUpdate(fn: (key: string) => void): () => void;   // devolve unsubscribe
+```
+
+Por que não o `import.meta.hot.accept((mod) => Object.assign(MOVEMENT, mod.MOVEMENT))` do design: verificado com `vite dev` + Chromium, a 1ª edição aplica (6 → 7) e as seguintes não — o Vite descarta os callbacks da versão antiga quando a nova se registra, e o callback da v2 copia sobre o objeto órfão da v2, não sobre o que `game.ts` segura. Com `keepLive`, edições 6 → 7 → 8 → 9 chegam ao jogo sem reload (`tests/data/hot-config.test.ts` cobre a mesma referência em três "edições").
+
+`render-config` precisa de aplicação explícita: `game.ts` registra `onConfigHotUpdate(handleConfigHotUpdate)`; para `key === 'render'` **restaura `shadows`/`renderScale` das settings do usuário** por cima do arquivo e, para qualquer chave, emite `config:changed { path: key }`. O listener de `config:changed` em `Game` reaplica `renderer.applyConfig(cfg, scene)` + `applyLightingConfig(lighting, scene, cfg)` quando `path` começa com `render`. Antes dessa mudança o `render-config` era importado também por `settings-defaults.ts` e `debug-stats-system.ts` (que não aceitavam), a propagação chegava à raiz e o Vite fazia **page reload** a cada edição.
 
 ### 15.2 Settings persistidas (`data/settings-defaults.ts`, `core/storage.ts`)
 
@@ -713,7 +722,7 @@ cd projects/limiar
 npm install              # uma vez
 npm run dev              # http://127.0.0.1:5173 (HUD ligado, F4 painel, P/T ativos, validateDefs roda)
 npm run typecheck        # tsc src/tests + tsconfig.node.json (e2e com checkJs)
-npm test                 # vitest: 10 suítes
+npm test                 # vitest: 11 suítes, 140 testes
 npm run build && npm run preview   # http://127.0.0.1:4173
 npm run test:e2e         # node e2e/smoke.mjs
 npm run check            # typecheck + test + build + e2e (~1 min)
@@ -799,12 +808,12 @@ Todas registradas pelos implementadores com motivo verificado. O código é o qu
 | 2 | §3.3 `World` | campos `scene, rig, input, events, collision, rng, entities, cfg, level, settings, stats, player, state, time` | mais `renderer`, `lighting`, `headOffsets`, `flags`, `debug`, `tuningMode` | `camera-sync` chama `updateShadowFollow`; `debug-stats` lê `renderer.gl.info`; `camera-feel` lê `renderer.aspect`; `player-look` precisa saber do modo de tuning; nada global |
 | 3 | §3.3 | comentário "lido por `player-physics`" | o sistema chama-se `character-physics` | nome da árvore §10.1 |
 | 4 | §3.4 | `EventBus<E extends Record<string, object>>` | `EventBus<E extends { [K in keyof E]: object }>`; emit aninhado até 16 níveis; flush até 64 passadas | `GameEvents` é uma interface sem index signature; limites evitam travar em recursão |
-| 5 | §3.5 | `render-config.ts` com HMR que chama `applyRenderConfig` via `config:changed` | sem `import.meta.hot` em `render-config.ts`; `game.ts` faz `hot.accept('../data/render-config')` | `data/` não conhece o renderer (§3.2). Bônus: `game.ts` **não** re-aceita `movement/camera/feel` — módulos que se auto-aceitam não propagam ao importador no Vite; um accept lá seria código morto |
+| 5 | §3.5 | HMR por `import.meta.hot.accept((mod) => Object.assign(MOVEMENT, mod.MOVEMENT))` em cada módulo de config; `render-config.ts` chama `applyRenderConfig` via `config:changed` | `keepLive(import.meta.hot, key, fresh, assign)` em `data/hot-config.ts` (objeto vivo em `import.meta.hot.data`) + `import.meta.hot.accept()` literal; `render-config` também se auto-aceita e `game.ts` ouve `onConfigHotUpdate` para reaplicar renderer/luzes preservando as settings | o padrão do design **só aplicava a 1ª edição** (callback da versão antiga descartado pelo Vite; verificado com `vite dev` + Chromium); e o accept de dependência em `game.ts` nunca disparava porque `render-config` tem outros importadores → page reload a cada edição |
 | 6 | §3.6 | `Spring` estável para ω·dt ≤ 0,5 | `step(dt)` sub-divide internamente para garantir ω·h ≤ 0,5 | frame de 0,1 s com ω = 26 divergia para NaN e a cena sumia (bug reproduzido em SwiftShader; teste adicionado) |
 | 7 | §3.6 | `rayCapsule(origin, dir, capsule, out)`; `SaveStore.validate` implícito | `rayCapsule(origin, dir, capsule, maxDist, out)`; `validate: (p) => p is T` **obrigatório**; `migrations.length === version − 1` verificado | `maxDist` poda antes de calcular a normal; validação obrigatória evita carregar lixo |
 | 8 | §4.3 | `InputState` é uma interface | classe concreta com API crua `onKeyCode/onMouseButton/onMouseMove/onWheel` + `attach/detach`; `blur` → `reset()` | testável em Node sem `KeyboardEvent`; keyup perdido ao trocar de janela |
 | 9 | §4.4 | `pointerlockerror` → mensagem + contador **e** também "falha → modo unlocked" | 1ª falha consecutiva → `'cooldown'` (1 200 ms); 2ª → `'unlocked'` | as duas regras do design conflitavam; assim o cooldown do Chromium não derruba o lock, e iframes/políticas caem para o fallback |
-| 10 | §4.2 kill-plane | "respawn em `lastSafePosition`" | `lastSafePosition` amostrada a cada `RESPAWN.safeGroundedSeconds = 1` s de chão contínuo (não copiada a cada passo); respawn de debug (P) vai ao spawn do nível e zera o look | quem corre para fora de uma beirada volta ~1 s atrás, não para a beirada |
+| 10 | §4.2 kill-plane | "respawn em `lastSafePosition`" (atualizada quando grounded há > 1 s) | amostra a cada `RESPAWN.safeGroundedSeconds = 1` s de chão contínuo **com um estágio de atraso**: a amostra nova vira `candidate` e a anterior é promovida a `lastSafePosition`; respawn de debug (P) vai ao spawn do nível e zera o look | sem o atraso a amostra podia cair a 22 cm da beirada (medido) e o respawn devolvia o jogador ao buraco; com ele o ponto seguro tem sempre ≥ 1 s de chão entre ele e a queda (respawn medido a 9 m do buraco) |
 | 11 | §5.2 | `const enum CollisionLayer`; `RayHit.entity?: EntityId`; `CapsuleHit/RayHit/Hitbox` em `world/` | objeto `as const` + `CollisionMask = number`; `entity: EntityId \| null`; `CapsuleHit/RayHit/CollisionQuery` em `core/physics/collision-query.ts` (`Hitbox` fica em `world/`) | `isolatedModules/verbatimModuleSyntax` proíbem `const enum`; `World \| Enemy` não cabe na união de literais; `exactOptionalPropertyTypes` proíbe zerar um opcional com `undefined`; `core/` não pode importar `world/` |
 | 12 | §5.2 | `CollisionWorld.rebuildStatic` = `clear()` + `fromGraphNode`; `debugHelper` = `Box3Helper` por nó; menção a `triangleCount` | Octree **novo** por rebuild; **um** `LineSegments` com todas as arestas; sem `triangleCount` (o HUD usa `BuiltLevel.stats.triangles`) | ~8,2 k nós → 8 199 draw calls com um helper por nó (14 fps); o Octree duplica triângulos entre nós (2 221 para 180 reais) |
 | 13 | §5.2 step-up | gatilho `normal.y < 0.3`; raio "do centro da base elevada"; step-up **depois** do slide; `!jumpedThisStep` no snap | gatilho = qualquer contato não caminhável com `wasGrounded`; raio do lado do contato; step-up **antes** do slide; sem `jumpedThisStep` | degraus < raio tocam a aresta (normal diagonal ≈ 0,44) e nunca disparavam; o slide contra a normal diagonal matava ~80 % do avanço; o snap já exige `vel.y ≤ 0` |
@@ -820,7 +829,7 @@ Todas registradas pelos implementadores com motivo verificado. O código é o qu
 | 23 | §8.1 | `Settings.debugHud` "ligado por padrão em DEV" | `debugHud: import.meta.env.DEV` | conforme o texto |
 | 24 | §9 e2e | andar 1 s para −Z, medir | também vira 90°, anda para −X, pula e liga o HUD; esperas por `world.time.sim`; porta livre por `net.createServer(0)` + `--strictPort` | em SwiftShader o relógio de parede não vale; porta fixa colidia |
 | 25 | §10.1 | `vite.config.ts` com `advancedChunks` | `build.rolldownOptions.output.codeSplitting.groups` + `chunkSizeWarningLimit: 700` | formato do Vite 8 (rolldown) |
-| 26 | §10.2 | `docs/limiar/{README.md, design.md, roadmap.md, performance.md}` | `01-visao-e-design.md`, `02-design-tecnico.md`, `03-arquitetura.md` (este), `04-roadmap.md`, `05-performance.md`, `decisoes/` | numeração para leitura em ordem |
+| 26 | §10.2 | `docs/limiar/{README.md, design.md, roadmap.md, performance.md}` | `README.md`, `01-visao-e-design.md`, `02-design-tecnico.md`, `03-arquitetura.md` (este), `04-roadmap.md`, `05-performance.md`, `06-guia-de-desenvolvimento.md`, `decisoes/` | numeração para leitura em ordem |
 | 27 | §3.3 | `CapsuleBody.layer/mask: CollisionLayer` | `CollisionMask` | ver #11 |
 | 28 | §3.1 | `ofKind` + type guards | igual, mais `ENTITY_KINDS` exportado | iteração sem alocar iterador de `Map` por frame |
 
@@ -828,9 +837,12 @@ Questões em aberto (não são divergências, mas convém saber):
 
 - Performance real não medida: sem GPU no ambiente de desenvolvimento (SwiftShader ≈ 20 fps a 1280 × 720). O critério "60 fps com sombras em iGPU" e "heap plano por 5 min" ficam para máquina real ([performance](./05-performance.md)).
 - Pointer lock **real** (modo `locked`, pausa por Esc, cooldown do Chromium, relock ao sair do tuning) não é testável em headless; só o caminho `unlocked` foi exercitado.
-- HMR de `movement-config.ts` (editar `walkSpeed` com o dev server aberto) foi implementado conforme o design, mas não exercitado por playwright.
+- HMR verificado com `vite dev` + Chromium (script fora do repositório): `walkSpeed` 6 → 7 → 8 → 9 e `fogDensity` 0,01 → 0,02 → 0,03 aplicados sem reload. Não há teste automatizado permanente desse caminho; `tests/data/hot-config.test.ts` cobre só a lógica de `keepLive`.
 - `Octree.capsuleIntersect`/`rayIntersect` alocam por chamada; monitorar heap é o gatilho da ADR 0003.
 - Controle aéreo conforme §5.1 (converge a `airMaxSpeed = 6` a 12 m/s²): um sprint-jump perde momentum em ~0,2 s. É o que o design especifica; possível ponto de tuning.
+- Subir rampa reduz a velocidade horizontal (≈ 5,25 m/s na rampa de 20,6° em vez de 6): o push-out do Octree tem componente horizontal. Feel aceitável; se incomodar, projetar a velocidade no plano do chão quando `grounded`.
+- Pousar sobre uma aresta (ex.: caixote) pode deixar a cápsula "pendurada" com os pés até 5 cm abaixo do topo (`normal.y ≈ 0,87 ≥ cos 46°` → `grounded`). Comportamento clássico de cápsula; não trepida.
+- Atalhos de debug (F3/F6/F7…) são lidos no passo fixo: não respondem enquanto o jogo está pausado (o loop não roda passos fixos em pausa).
 
 ---
 
@@ -842,5 +854,6 @@ Questões em aberto (não são divergências, mas convém saber):
 - [ ] Novo número: em `src/data`; se for constante local de algoritmo, `const` nomeada com comentário.
 - [ ] Novo evento: assinatura em `game/events.ts`; `emit` para reação imediata, `queue` se cria/remove entidade.
 - [ ] Config mutável: sistemas leem `world.cfg.*` no uso; nunca copiar em `init`.
+- [ ] Novo módulo de config em `data/`: exportar `keepLive(import.meta.hot, '<chave>', valores, assign)` e manter `if (import.meta.hot) import.meta.hot.accept();` literalmente no fonte; se algo precisa reaplicar após HMR, ouvir `onConfigHotUpdate` em `game/`.
 - [ ] Render: qualquer mudança em `cfg.render` passa por `config:changed` → `Game.applyRenderConfig`.
 - [ ] `npm run check` verde (typecheck + vitest + build + e2e) antes de considerar pronto.

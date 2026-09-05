@@ -2,7 +2,7 @@
 
 ## Status
 
-Aceita (M0). Referência: design técnico §5.3 e §6.3. `src/core/layers.ts` existe; `src/core/camera-rig.ts` e `src/core/renderer.ts` são planejados.
+Aceita (M0). Referência: design técnico §5.3 e §6.3. Implementado em `src/core/layers.ts`, `src/core/camera-rig.ts` (classe `CameraRig`), `src/core/renderer.ts` (`Renderer.renderFrame`) e `src/systems/camera-sync.ts`.
 
 ## Contexto
 
@@ -10,33 +10,35 @@ Gunplay é o pilar nº 1. Em primeira pessoa, a arma renderizada com a câmera d
 
 ## Decisão
 
-Hierarquia (planejada em `src/core/camera-rig.ts`):
+Hierarquia (`CameraRig`, nomes dos `Object3D` iguais aos campos):
 
 ```
 rig.root (Object3D)                       posição = pés interpolados; rotation.y = yaw
-└── rig.head (Object3D)                   y = eyeHeight + kicks; rotação 'YXZ':
-    │                                     x = pitch + recoil + kick de pouso (+ bob); clamp ±89° DEPOIS da soma
-    ├── rig.worldCamera (PerspectiveCamera)      camadas WORLD=0 (+ DEBUG=2); near 0,05; far 300; vfov de hFOV
+└── rig.head (Object3D)                   y = eyeHeight + offsets.y; rotação 'YXZ':
+    │                                     x = clamp(pitch + offsets.pitch, ±89°) — clamp DEPOIS da soma
+    ├── rig.worldCamera (PerspectiveCamera)      camada WORLD=0 (+ DEBUG=2 com F6); near 0,05; far 300; vfov de hFOV
     └── rig.viewmodelRoot (Object3D)             "ombro" da arma: sway/ADS/sprint pose (M1)
         ├── rig.viewmodelCamera (PerspectiveCamera)  camada VIEWMODEL=1; fov 55° vertical fixo; near 0,01; far 5
         └── rig.weaponSocket (Object3D)          vazio em M0; a arma é filha daqui em M1
 ```
 
-Passadas por frame (planejadas em `renderFrame` de `src/core/renderer.ts`):
+Passadas por frame (`Renderer.renderFrame(scene, rig)`):
 
 ```ts
-renderer.autoClear = false;
-renderer.shadowMap.needsUpdate = true;   // sombra 1x por frame, só nesta passada
-renderer.clear();
-renderer.render(scene, rig.worldCamera); // camada 0 (+2 com helpers)
-renderer.clearDepth();
-renderer.render(scene, rig.viewmodelCamera); // camada 1 (vazia em M0)
+// construtor: gl.autoClear = false; gl.shadowMap.autoUpdate = false; gl.info.autoReset = false
+this.gl.info.reset();
+this.gl.shadowMap.needsUpdate = true;      // sombra 1x por frame, só nesta passada
+this.gl.clear();
+this.gl.render(scene, rig.worldCamera);    // camada 0 (+2 com helpers)
+this.gl.clearDepth();
+this.gl.render(scene, rig.viewmodelCamera); // camada 1 (vazia em M0)
 ```
 
 - `shadowMap.autoUpdate = false`: sem isso a segunda passada renderizaria o shadow map de novo.
-- Luzes com `light.layers.enableAll()` para iluminar a arma.
+- Luzes com `layers.enableAll()` (`src/world/lighting.ts`) para iluminar a arma.
 - Corpo só tem yaw; pitch fica na cabeça. Ordem `'YXZ'` (yaw global, pitch local) evita roll induzido.
-- Offsets de recoil, kick de pouso e head-bob são **somados por frame e nunca acumulados**: cada contribuição decai sozinha por `Spring` (`src/core/math/spring.ts`) ou damp. É o que faz o recoil "voltar" sem a câmera puxar.
+- Offsets de recoil, kick de pouso e head-bob (`HeadOffsets`: `pitch`, `yaw`, `roll`, `x`, `y`, `back`) são **somados por frame em `applyPose(yaw, pitch, offsets)` e nunca acumulados**: `camera-feel` decai cada contribuição por `Spring` (`src/core/math/spring.ts`) ou damp. É o que faz o recoil "voltar" sem a câmera puxar.
+- `setHfov(hfovDeg, aspect)` recalcula o vfov da câmera do mundo e só o aspect da câmera da arma (ADR 0007).
 - A segunda passada roda sempre, mesmo vazia, para que o número de performance de M0 seja honesto (custo: 1 `clearDepth` + 1 render vazio).
 
 ## Alternativas consideradas
@@ -52,7 +54,7 @@ renderer.render(scene, rig.viewmodelCamera); // camada 1 (vazia em M0)
 
 - Positivas: arma nunca atravessa parede nem estica; FOV da arma (55°) independente do FOV do mundo; recoil, sway, ADS e sprint pose (M1) atuam em `viewmodelRoot` sem tocar a simulação.
 - Positivas: M1 só cria a arma como filha de `weaponSocket`; nada do rig muda.
-- Negativas: duas `PerspectiveCamera` para manter no resize (vfov recalculado de hFOV); risco de renderizar a sombra 2× se alguém religar `shadowMap.autoUpdate`.
+- Negativas: duas `PerspectiveCamera` para manter no resize (o `Renderer` chama `onResize` e o jogo repassa a `setHfov`); risco de renderizar a sombra 2× se alguém religar `shadowMap.autoUpdate`.
 
 ## Gatilho de revisão
 

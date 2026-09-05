@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { rad } from '@/core/math';
 import { RESPAWN } from '@/data/movement-config';
 import type { GameEvents } from '@/game/events';
@@ -46,17 +47,22 @@ export function respawnPlayer(world: World, reason: GameEvents['player:respawned
 /**
  * Fixed #3 (design §4.2): abaixo de level.killPlaneY → respawn em
  * lastSafePosition. A posição segura é amostrada a cada `safeGroundedSeconds`
- * de chão contínuo (não a cada passo): quem corre para fora de uma beirada
- * volta até 1 s atrás, não para a própria beirada.
+ * de chão contínuo (não a cada passo) e com um estágio de atraso: a amostra
+ * nova vira `candidate` e a anterior é promovida a lastSafePosition. Sem o
+ * atraso, a amostra podia cair a centímetros da beirada (verificado: 22 cm)
+ * e quem corre para fora voltava para a própria beirada; com ele, o ponto
+ * seguro tem sempre ≥ 1 s de chão contínuo entre ele e a queda.
  */
 export function createKillPlaneSystem(): System {
   let groundedTime = 0;
+  const candidate = new THREE.Vector3();
 
   return {
     name: 'kill-plane',
     init(world) {
       groundedTime = 0;
       world.player.lastSafePosition.copy(world.player.transform.position);
+      candidate.copy(world.player.transform.position);
     },
     fixedUpdate(world, dt) {
       const p = world.player;
@@ -64,7 +70,8 @@ export function createKillPlaneSystem(): System {
       if (p.body.grounded) {
         groundedTime += dt;
         if (groundedTime >= RESPAWN.safeGroundedSeconds) {
-          p.lastSafePosition.copy(p.transform.position);
+          p.lastSafePosition.copy(candidate);
+          candidate.copy(p.transform.position);
           groundedTime = 0;
         }
       } else {
@@ -72,6 +79,7 @@ export function createKillPlaneSystem(): System {
       }
       if (p.transform.position.y < world.level.killPlaneY) {
         respawnPlayer(world, 'killplane');
+        candidate.copy(p.lastSafePosition);
         groundedTime = 0;
       }
     },

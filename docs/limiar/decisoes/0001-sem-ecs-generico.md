@@ -2,7 +2,7 @@
 
 ## Status
 
-Aceita (M0). Referência: design técnico §3.1 e §3.2.
+Aceita (M0). Referência: design técnico §3.1 e §3.2. Implementado em `src/core/entity.ts`, `src/core/events.ts`, `src/systems/system.ts` e `src/game/systems-list.ts`.
 
 ## Contexto
 
@@ -21,11 +21,11 @@ São centenas de entidades, não milhares. Em Three.js o gargalo real é draw ca
 
 Arquitetura híbrida "módulos + entidades tipadas + sistemas ordenados + eventos":
 
-- **Entidades** são interfaces TS de dados puros (sem métodos) com discriminador `kind`. Cada `kind` tem uma fábrica `createX()` em `entities/`. Vivem num `EntityStore` (`src/core/entity.ts`) que mantém uma lista estável por `kind` e um mapa por id.
-- **Composição transversal** por interfaces (`Damageable`, `HasCapsuleBody`) e type guards em `entities/index.ts` — nunca por herança.
-- **Sistemas** são objetos `{ name, init?, fixedUpdate?, frameUpdate?, dispose? }` registrados numa lista ordenada única em `src/game/systems-list.ts` (planejado). Sistemas não guardam estado de entidades; só caches próprios.
-- **`EventBus` tipado** (`src/core/events.ts`) com `emit` síncrono e `queue`/`flush` ao fim de cada passo fixo. O loop chama `events.flush()` e depois `entities.flushRemovals()`.
-- **Three.js é detalhe de renderização.** A simulação lê e escreve `transform`; só `view-sync`/`camera-sync` tocam `Object3D`. Testes de movimento rodam em Node sem WebGL.
+- **Entidades** são interfaces TS de dados puros (sem métodos) com discriminador `kind`. Cada `kind` tem uma fábrica em `entities/` (`createPlayer`, `createStaticWorld`). Vivem num `EntityStore` (`src/core/entity.ts`) que mantém uma lista estável por `kind` (`ofKind`) e um mapa por id (`get`).
+- **Composição transversal** por interfaces e type guards em `src/entities/index.ts` — hoje `HasCapsuleBody` / `hasBody()`; `Damageable` é planejado para M1/M2. Nunca por herança.
+- **Sistemas** são objetos `{ name, init?, fixedUpdate?, frameUpdate?, dispose? }` (`src/systems/system.ts`) registrados numa lista ordenada única em `src/game/systems-list.ts`. O loop percorre a lista inteira em cada fase e chama só o método que o sistema define. Sistemas não guardam estado de entidades; só caches próprios.
+- **`EventBus` tipado** (`src/core/events.ts`, eventos em `src/game/events.ts`) com `emit` síncrono e `queue`/`flush` ao fim de cada passo fixo. O loop chama `events.flush()` e depois `entities.flushRemovals()`.
+- **Three.js é detalhe de renderização.** A simulação lê e escreve `transform`; só `view-sync` e `camera-sync` tocam `Object3D`. Testes de movimento (`tests/physics/*.test.ts`) rodam em Node sem WebGL.
 
 ## Alternativas consideradas
 
@@ -40,7 +40,7 @@ Arquitetura híbrida "módulos + entidades tipadas + sistemas ordenados + evento
 - Positivas: cada `kind` novo é um arquivo em `entities/`, um sistema em `systems/`, uma linha em `systems-list.ts` e uma alternativa a mais em `AnyEntity`. Contratos de `core/` não mudam (design §11).
 - Positivas: `queue`/`flush` evita o bug "morte durante iteração" (loot criado enquanto a lista de inimigos é percorrida).
 - Negativas: sem queries por combinação de componentes; iterar "toda entidade com `body`" usa `ofKind` + type guard. Aceitável para ≤ 200 entidades.
-- Regras de dependência entre pastas (§3.2) são verificadas por `tests/architecture.test.ts` (planejado) para o esqueleto não degradar.
+- Regras de dependência entre pastas (§3.2) são verificadas por `tests/architecture.test.ts` para o esqueleto não degradar.
 
 ## Gatilho de revisão
 

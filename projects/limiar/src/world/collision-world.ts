@@ -6,6 +6,7 @@ import { Layer } from '@/core/layers';
 import { rayCapsule, type RayContact } from '@/core/math';
 import type { CapsuleHit, CollisionQuery, RayHit } from '@/core/physics/collision-query';
 import { CollisionLayer, type CollisionMask } from '@/core/physics/layers';
+import { PALETTE } from '@/data/palette';
 
 /** Volume de acerto de uma entidade; esfera = cápsula com start = end. */
 export interface Hitbox {
@@ -14,7 +15,8 @@ export interface Hitbox {
   capsule: Capsule;
 }
 
-const DEBUG_NODE_COLOR = 0x3fd2c7;
+/** Arestas do Octree no ciano dos Vigias (mesma cor do HUD de debug). */
+const DEBUG_NODE_COLOR = PALETTE.wardenCyan;
 
 const ray = new THREE.Ray();
 const contact: RayContact = { point: new THREE.Vector3(), normal: new THREE.Vector3(), distance: 0 };

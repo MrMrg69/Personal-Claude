@@ -1,13 +1,23 @@
 import type { RenderConfig } from '@/core/renderer';
+import { keepLive } from './hot-config';
 import { PALETTE } from './palette';
+
+/** Copia sem trocar as referências aninhadas (lights/shadow; o painel lil-gui liga nelas). */
+export function assignRenderConfig(live: RenderConfig, fresh: RenderConfig): void {
+  const { lights, shadow, ...scalars } = fresh;
+  Object.assign(live, scalars);
+  Object.assign(live.lights, lights);
+  Object.assign(live.shadow, shadow);
+}
 
 /**
  * Renderização (design §6.1–6.2). Diferente das outras configs, mudanças aqui
- * exigem aplicação explícita (Renderer.applyConfig / applyLightingConfig); o
- * HMR que dispara isso vive em game/ (accept de dependência), não aqui — data/
- * não conhece o renderer.
+ * exigem aplicação explícita (Renderer.applyConfig / applyLightingConfig):
+ * game/ ouve onConfigHotUpdate('render') e reaplica — data/ não conhece o
+ * renderer. Sombras e render scale são escolha do usuário (settings) e o game
+ * as restaura por cima do arquivo.
  */
-export const RENDER: RenderConfig = {
+const DEFAULTS: RenderConfig = {
   pixelRatioCap: 1.5,
   renderScale: 1,
   shadows: true,
@@ -34,6 +44,10 @@ export const RENDER: RenderConfig = {
     lightDistance: 80,
   },
 };
+
+export const RENDER: RenderConfig = keepLive(import.meta.hot, 'render', DEFAULTS, assignRenderConfig);
+
+if (import.meta.hot) import.meta.hot.accept();
 
 /** Escala alternativa de F8 (1,0 ↔ 0,75). */
 export const RENDER_SCALE_ALT = 0.75;

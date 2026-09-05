@@ -2,7 +2,7 @@
 
 ## Status
 
-Aceita (M0). Referência: design técnico §5.2 e §12. Implementado em `src/core/physics/collision-query.ts`, `src/core/physics/collision-resolve.ts` e `src/core/physics/layers.ts`; `src/world/collision-world.ts` (implementação sobre `Octree`) é planejado.
+Aceita (M0). Referência: design técnico §5.2 e §12. Implementado em `src/core/physics/collision-query.ts`, `src/core/physics/collision-resolve.ts`, `src/core/physics/layers.ts` e `src/world/collision-world.ts` (classe `CollisionWorld` sobre o `Octree`).
 
 ## Contexto
 
@@ -17,11 +17,11 @@ O mundo de teste tem rampas (20,6°, 40°, 53°), degraus, corredor de 1,2 m e q
 
 ## Decisão
 
-- Colisão do mundo estático por `Octree.fromGraphNode(root)` + `capsuleIntersect` e `rayIntersect` de `three/addons/math/Octree.js`, com `Capsule` de `three/addons/math/Capsule.js`.
-- A resolução (`resolveCapsuleCollision` em `src/core/physics/collision-resolve.ts`) é **pura sobre a interface `CollisionQuery`** (`src/core/physics/collision-query.ts`): `capsuleIntersect(c, out)` e `raycast(origin, dir, maxDist, mask, out)`. `world/collision-world.ts` implementa essa interface sobre o Octree e hitboxes dinâmicas. Assim o core é testável com um mundo sintético e a implementação pode ser trocada sem tocar na física.
+- Colisão do mundo estático por `Octree.fromGraphNode(root)` (`CollisionWorld.rebuildStatic`, build único no carregamento) + `capsuleIntersect` e `rayIntersect` de `three/addons/math/Octree.js`, com `Capsule` de `three/addons/math/Capsule.js`.
+- A resolução (`resolveCapsuleCollision` em `src/core/physics/collision-resolve.ts`) é **pura sobre a interface `CollisionQuery`** (`src/core/physics/collision-query.ts`): `capsuleIntersect(c, out)` e `raycast(origin, dir, maxDist, mask, out)`. `CollisionWorld` implementa essa interface sobre o Octree e sobre hitboxes analíticas (`addHitbox`/`removeHitbox`, cápsula por referência). Assim o core é testável com um mundo sintético e a implementação pode ser trocada sem tocar na física.
 - Algoritmo por passo: até 5 iterações de push-out com folga de 1 mm; contato com `normal.y ≥ cos 46°` é chão, o resto desliza; **step-up explícito** (0,35 m, só quando estava no chão) e **snap ao chão** (0,20 m) ao descer rampas. Sem "rampa lenta": abaixo do limite é chão, acima é parede.
 - `CollisionLayer` (`World`, `Player`, `Enemy`, `Projectile`, `Pickup`) como bitmask, e `RayHit.entity` identifica a hitbox atingida — hitscan de M1 já distingue mundo de inimigo.
-- Custo esperado: Octree de ~5k triângulos, ≤ 5 `capsuleIntersect` + 1–2 raycasts → < 0,1 ms por passo. Build único no carregamento.
+- Custo esperado: Octree de poucos milhares de triângulos, ≤ 5 `capsuleIntersect` + 1–2 raycasts → < 0,1 ms por passo.
 
 ### Desvio registrado
 
@@ -34,13 +34,16 @@ Ver tabela acima. Em resumo: AABB não cobre rampas; `three-mesh-bvh` custa bund
 ## Consequências
 
 - Positivas: 0 KB de dependência extra; raycast e colisão no mesmo objeto; interface estável para IA e armas.
-- Negativas: `rayIntersect` do Octree é menos eficiente que BVH em malhas grandes; push-out iterativo pode "grudar" em quinas — mitigado por step-up explícito, epsilon e os testes de `tests/physics/collision.test.ts` (planejado) com corredor, quina e rampas.
-- Hitboxes dinâmicas (cápsula × cápsula analítica) entram só em M2; em M0 `capsuleIntersect` considera apenas `World`.
+- Negativas: `Octree.capsuleIntersect`/`rayIntersect` **alocam internamente** (arrays de triângulos e objeto de resultado). É o custo aceito de usar o addon oficial sem cópia — e um dos gatilhos de migração abaixo.
+- Negativas: `rayIntersect` do Octree é menos eficiente que BVH em malhas grandes; push-out iterativo pode "grudar" em quinas — mitigado por step-up explícito, epsilon e os testes de `tests/physics/collision.test.ts` (corredor, quina, rampas).
+- O helper F6 (`CollisionWorld.debugHelper()`) mescla as arestas de todos os nós num único `LineSegments` (1 draw call) — o Campo de Provas tem ~8k nós; um `Box3Helper` por nó seria inutilizável.
+- Hitboxes dinâmicas entram só em M2; em M0 `capsuleIntersect` considera apenas `World`.
 
 ## Gatilho de revisão
 
-Migrar `world/collision-world.ts` para `three-mesh-bvh` (`shapecast`/`raycastFirst`) — **mantendo a interface `CollisionQuery`** — quando qualquer um ocorrer:
+Migrar `CollisionWorld` para `three-mesh-bvh` (`shapecast`/`raycastFirst`) — **mantendo a interface `CollisionQuery`** — quando qualquer um ocorrer:
 
 - malha de colisão com **> 50 000 triângulos**;
 - `raycast` acima de **0,3 ms** no profile com 40 inimigos ativos;
+- picos de GC atribuíveis à alocação interna do Octree no profile de memória (heap não plano por 5 min, ver `05-performance.md`);
 - "grudar em quinas" não resolvido após os testes de colisão e o helper F6.

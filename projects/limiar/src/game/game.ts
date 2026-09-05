@@ -8,12 +8,13 @@ import { Layer } from '@/core/layers';
 import { GameLoop } from '@/core/loop';
 import { Random } from '@/core/math/random';
 import { DEFAULT_POINTER_LOCK_OPTIONS, PointerLockController, type PointerLockMode } from '@/core/pointer-lock';
-import { createRenderer, type RenderConfig, type Renderer } from '@/core/renderer';
+import { createRenderer, type Renderer } from '@/core/renderer';
 import { SaveStore } from '@/core/storage';
 import { readUrlFlags } from '@/core/url-flags';
 import { DEFS, validateDefs } from '@/data';
 import { CAMERA } from '@/data/camera-config';
 import { FEEL } from '@/data/feel-config';
+import { onConfigHotUpdate } from '@/data/hot-config';
 import { INPUT_BINDINGS } from '@/data/input-bindings';
 import { TEST_GROUND, TEST_GROUND_TOWER_TOP } from '@/data/levels/test-ground';
 import { MOVEMENT } from '@/data/movement-config';
@@ -49,14 +50,6 @@ export interface GameElements {
 
 /** Subdivisões do wireframe da cápsula de debug (F6). */
 const CAPSULE_HELPER_SEGMENTS = { cap: 4, radial: 8 } as const;
-
-/** Copia uma RenderConfig sobre outra sem trocar as referências aninhadas. */
-function assignRenderConfig(dst: RenderConfig, src: RenderConfig): void {
-  const { lights, shadow, ...scalars } = src;
-  Object.assign(dst, scalars);
-  Object.assign(dst.lights, lights);
-  Object.assign(dst.shadow, shadow);
-}
 
 /**
  * Monta e coordena tudo (design §4.4, §8): renderer, cena, luzes, nível,
@@ -190,7 +183,7 @@ export class Game {
         this.shadowsAutoOff = !enabled && auto;
       }),
     );
-    this.installHmr();
+    this.unsubscribe.push(onConfigHotUpdate(this.handleConfigHotUpdate));
 
     // Loop: começa pausado em 'ready' (o render continua atrás do overlay).
     this.loop = new GameLoop({
@@ -489,22 +482,20 @@ export class Game {
   }
 
   /**
-   * HMR (design §3.5): movement/camera/feel se auto-aceitam em data/ (Object.assign
-   * in-place; sistemas leem no uso). render-config não se auto-aceita porque
-   * precisa de aplicação explícita — o accept de dependência fica aqui.
+   * HMR (design §3.5): os módulos de data/*-config se auto-aceitam e keepLive
+   * copia os valores novos sobre o objeto vivo (sistemas leem no uso). Aqui só
+   * o que precisa de aplicação explícita: render (renderer + luzes), com as
+   * escolhas do usuário (sombras, render scale) restauradas por cima do arquivo.
    */
-  private installHmr(): void {
-    if (!import.meta.hot) return;
-    import.meta.hot.accept('../data/render-config', (mod) => {
-      const next: RenderConfig | undefined = mod?.RENDER;
-      if (!next || this.disposed) return;
-      // Sombras/escala são escolha do usuário (settings), não do arquivo.
-      assignRenderConfig(this.world.cfg.render, next);
-      this.world.cfg.render.shadows = this.world.settings.shadows;
-      this.world.cfg.render.renderScale = this.world.settings.renderScale;
-      this.world.events.emit('config:changed', { path: 'render' });
-    });
-  }
+  private readonly handleConfigHotUpdate = (key: string): void => {
+    if (this.disposed) return;
+    if (key === 'render') {
+      const w = this.world;
+      w.cfg.render.shadows = w.settings.shadows;
+      w.cfg.render.renderScale = w.settings.renderScale;
+    }
+    this.world.events.emit('config:changed', { path: key });
+  };
 
   private lockLabel(): string {
     if (this.pointerLock.mode === 'unlocked') return 'NOLOCK';
